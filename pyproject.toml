@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "deepdebug-agent"
+version = "0.1.0"
+description = "Evidence-based diagnosis assistant for PyTorch failures"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2.5,<3"]
+
+[project.scripts]
+deepdebug = "deepdebug.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "ruff>=0.9,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/deepdebug"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
