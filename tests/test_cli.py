@@ -1,5 +1,6 @@
 """Smoke checks for the installed package and both public entry points."""
 
+import json
 import subprocess
 import sys
 from importlib.metadata import version
@@ -23,3 +24,18 @@ def test_unknown_command_is_rejected() -> None:
         timeout=10,
     )
     assert result.returncode == 2
+
+
+@pytest.mark.parametrize("kind", ["action", "state", "report", "snapshot"])
+def test_schema_export_is_json(kind: str) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "deepdebug", "schema", kind],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    schema = json.loads(result.stdout)
+    assert "$defs" in schema
+    if kind == "action":
+        assert schema["discriminator"]["propertyName"] == "action"

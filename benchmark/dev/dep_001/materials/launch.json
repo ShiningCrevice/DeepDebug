@@ -1,0 +1,6 @@
+{
+  "intended_interpreter": "/demo/empty-env/bin/python",
+  "actual_interpreter": "/demo/empty-env/bin/python",
+  "required_distribution": "pydantic",
+  "isolated_mode": true
+}

@@ -1,1 +1,1 @@
-"""Diagnosis state, action schemas, and controller (planned)."""
+"""Diagnosis state and action contracts; controller execution is not implemented yet."""

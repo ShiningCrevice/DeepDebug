@@ -3,8 +3,8 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成初始化：Python 包、CLI、uv 锁定、基础检查和模块骨架。诊断功能尚未实现。
-- 下一步是两个依赖/解释器开发案例及 Pydantic 协议，随后构建 CLI 取证闭环。
+- 当前完成初始化、Pydantic 数据/动作/状态/报告协议、JSON Schema 导出及两个真实采集的依赖开发案例。自动诊断尚未实现。
+- 下一步实现材料登记与路径权限、日志解析、快照读取和证据编号，通过 CLI 构建取证闭环。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
@@ -21,6 +21,9 @@
 - CLI/未来 UI 只负责交互；决策、工具、证据和报告保持清晰边界。
 - 完成修改后执行 `uv run --locked ruff check .`、`uv run --locked ruff format --check .` 和相关 pytest；包配置变动时执行 `uv build`。
 - 控制器测试使用固定模型响应，不依赖付费 API；优先验证协议、权限、预算和证据正确性。
+- 协议见 `docs/tool-api.md`。在持久化、工具调度和报告输出边界重新校验完整状态；直接修改模型中的列表或使用 `model_copy(update=...)` 不保证经过校验。
+- `benchmark/dev/*/materials/` 是输入数据，不用 Ruff 自动改写其中的 Python 案例。两个依赖案例同属 `dependency_interpreter` 案例族，只留在开发集。
+- `scripts/capture_dependency_cases.py` 是开发用固定采集脚本，不是 Agent 工具。参考状态/报告位于 `benchmark/gold/dev/`，均为人工编写，修复未执行。
 
 ## 不可突破的产品约束
 

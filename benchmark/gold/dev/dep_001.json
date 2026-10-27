@@ -1,0 +1,286 @@
+{
+  "schema_version": "1",
+  "session_id": "dep_001",
+  "inputs": [
+    {
+      "artifact_id": "A001",
+      "kind": "log",
+      "display_name": "log.txt",
+      "origin": "fixture",
+      "size_bytes": 202,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A002",
+      "kind": "code",
+      "display_name": "dependency_demo.py",
+      "origin": "fixture",
+      "size_bytes": 78,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A003",
+      "kind": "config",
+      "display_name": "launch.json",
+      "origin": "fixture",
+      "size_bytes": 177,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A004",
+      "kind": "snapshot",
+      "display_name": "target_snapshot.json",
+      "origin": "fixture",
+      "size_bytes": 371,
+      "redaction_status": "reviewed"
+    }
+  ],
+  "target_environment": {
+    "mode": "snapshot",
+    "environment_id": "ENV_EMPTY",
+    "interpreter": "/demo/empty-env/bin/python",
+    "collected_at": "2026-10-27T17:57:31.738727Z"
+  },
+  "error_summary": "启动时导入 pydantic 失败，异常为 ModuleNotFoundError。",
+  "evidence": [
+    {
+      "evidence_id": "E001",
+      "source": {
+        "kind": "artifact",
+        "id": "A001",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 5,
+        "end": 5
+      },
+      "content": "ModuleNotFoundError: No module named 'pydantic'",
+      "collected_at": "2026-10-27T17:57:31.804204Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E002",
+      "source": {
+        "kind": "artifact",
+        "id": "A001",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 1
+      },
+      "content": "interpreter=/demo/empty-env/bin/python",
+      "collected_at": "2026-10-27T17:57:31.804204Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E003",
+      "source": {
+        "kind": "snapshot",
+        "id": "A004",
+        "environment_id": "ENV_EMPTY",
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "field",
+        "pointer": "/packages/0"
+      },
+      "content": "{\"name\": \"pydantic\", \"status\": \"not_found\", \"version\": null, \"error\": null}",
+      "collected_at": "2026-10-27T17:57:31.738727Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E004",
+      "source": {
+        "kind": "artifact",
+        "id": "A003",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "field",
+        "pointer": "/intended_interpreter"
+      },
+      "content": "/demo/empty-env/bin/python",
+      "collected_at": "2026-10-27T17:57:31.804204Z",
+      "truncated": false
+    }
+  ],
+  "hypotheses": [
+    {
+      "hypothesis_id": "H1",
+      "cause": "预期与实际解释器相同，该环境的快照未发现 pydantic 分发包元数据，导入也失败。",
+      "confidence": "有支持但待验证",
+      "supporting_evidence": [
+        "E001",
+        "E002",
+        "E003",
+        "E004"
+      ],
+      "opposing_evidence": [],
+      "pending_checks": [
+        "在目标解释器确认依赖导入；快照是独立进程的采集结果。"
+      ]
+    }
+  ],
+  "next_action": null,
+  "tool_history": [],
+  "budget": {
+    "max_decision_calls": 6,
+    "max_tool_calls": 8,
+    "max_report_repairs": 1,
+    "max_tokens": 50000,
+    "reserved_report_tokens": 5000,
+    "max_duration_seconds": 120,
+    "tool_timeout_seconds": 10,
+    "gpu_timeout_seconds": 15,
+    "decision_calls": 0,
+    "tool_calls": 0,
+    "report_repairs": 0,
+    "tokens_used": 0,
+    "elapsed_ms": 0
+  },
+  "stop_reason": "completed",
+  "report": {
+    "schema_version": "1",
+    "session_id": "dep_001",
+    "summary": "启动时导入 pydantic 失败，异常为 ModuleNotFoundError。",
+    "category": "dependency",
+    "target_environment": {
+      "mode": "snapshot",
+      "environment_id": "ENV_EMPTY",
+      "interpreter": "/demo/empty-env/bin/python",
+      "collected_at": "2026-10-27T17:57:31.738727Z"
+    },
+    "evidence": [
+      {
+        "evidence_id": "E001",
+        "source": {
+          "kind": "artifact",
+          "id": "A001",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 5,
+          "end": 5
+        },
+        "content": "ModuleNotFoundError: No module named 'pydantic'",
+        "collected_at": "2026-10-27T17:57:31.804204Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E002",
+        "source": {
+          "kind": "artifact",
+          "id": "A001",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 1
+        },
+        "content": "interpreter=/demo/empty-env/bin/python",
+        "collected_at": "2026-10-27T17:57:31.804204Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E003",
+        "source": {
+          "kind": "snapshot",
+          "id": "A004",
+          "environment_id": "ENV_EMPTY",
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "field",
+          "pointer": "/packages/0"
+        },
+        "content": "{\"name\": \"pydantic\", \"status\": \"not_found\", \"version\": null, \"error\": null}",
+        "collected_at": "2026-10-27T17:57:31.738727Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E004",
+        "source": {
+          "kind": "artifact",
+          "id": "A003",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "field",
+          "pointer": "/intended_interpreter"
+        },
+        "content": "/demo/empty-env/bin/python",
+        "collected_at": "2026-10-27T17:57:31.804204Z",
+        "truncated": false
+      }
+    ],
+    "hypotheses": [
+      {
+        "hypothesis_id": "H1",
+        "cause": "预期与实际解释器相同，该环境的快照未发现 pydantic 分发包元数据，导入也失败。",
+        "confidence": "有支持但待验证",
+        "supporting_evidence": [
+          "E001",
+          "E002",
+          "E003",
+          "E004"
+        ],
+        "opposing_evidence": [],
+        "pending_checks": [
+          "在目标解释器确认依赖导入；快照是独立进程的采集结果。"
+        ]
+      }
+    ],
+    "fixes": [
+      {
+        "hypothesis_id": "H1",
+        "description": "人工检查项目依赖声明，在目标环境准备所需 pydantic 依赖。",
+        "conditions": "先确认材料对应同一任务；/demo 路径是脱敏别名，不能直接作为执行路径。",
+        "impact": "准备依赖可能改变环境中的包版本，需要人工审阅。",
+        "evidence_ids": [
+          "E001",
+          "E002",
+          "E003",
+          "E004"
+        ],
+        "verification_steps": [
+          "人工确认实际 sys.executable 与预期一致。",
+          "使用确认后的解释器检查 pydantic 导入。"
+        ],
+        "success_criteria": "解释器匹配且 pydantic 导入成功；不等于完整训练恢复。"
+      }
+    ],
+    "verifications": [
+      {
+        "check_id": "dependency_import",
+        "status": "未执行",
+        "reason": "仅采集了失败输入和元数据；修复后的验证未运行。",
+        "evidence_ids": [],
+        "execution": null
+      }
+    ],
+    "unresolved_questions": [
+      "尚未运行修复后的检查，也没有执行真实训练。"
+    ],
+    "tool_history": [],
+    "stop_reason": "completed"
+  }
+}

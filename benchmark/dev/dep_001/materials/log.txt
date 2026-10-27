@@ -1,0 +1,5 @@
+interpreter=/demo/empty-env/bin/python
+Traceback (most recent call last):
+  File "/demo/work/dependency_demo.py", line 3, in <module>
+    import pydantic
+ModuleNotFoundError: No module named 'pydantic'

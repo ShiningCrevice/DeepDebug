@@ -1,0 +1,20 @@
+{
+  "case_id": "dep_001",
+  "family_id": "dependency_interpreter",
+  "split": "dev",
+  "category": "dependency",
+  "materials": [
+    "materials/log.txt",
+    "materials/dependency_demo.py",
+    "materials/launch.json",
+    "materials/target_snapshot.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-10-27T17:57:31.804204+00:00",
+    "synthetic": false,
+    "paths_redacted": true,
+    "capture_method": "scripts/capture_dependency_cases.py",
+    "exit_code": 1,
+    "scope": "真实 Python 依赖导入失败；非 PyTorch 训练或 GPU 运行。launch.json 的预期解释器由开发者设定；快照为独立探针进程采集。"
+  }
+}
