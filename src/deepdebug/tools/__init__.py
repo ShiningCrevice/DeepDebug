@@ -1,1 +1,1 @@
-"""Controlled evidence collection tools (planned)."""
+"""Read-only evidence collection from registered materials and snapshots."""

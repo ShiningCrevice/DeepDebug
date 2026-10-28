@@ -1,6 +1,6 @@
 # 数据协议 v1
 
-协议实现位于 `src/deepdebug/agent/`，不执行文件读取、探针或模型调用。使用 `deepdebug schema action/state/report/snapshot` 导出当前 JSON Schema。
+协议实现位于 `src/deepdebug/agent/`，协议自身不执行文件读取、探针或模型调用。使用 `deepdebug schema action/state/report/snapshot` 导出当前 JSON Schema。宿主取证实现见本文最后一节。
 
 ## 类型与边界
 
@@ -54,3 +54,25 @@
 `Budget` 默认 6 次决策、8 次工具、1 次报告修正、50,000 token（含预留 5,000）、120 秒总时限，普通工具 10 秒、GPU 探针 15 秒。当前只校验配置和计数，尚不执行预算扣减和停止；允许记录超过上限的实际用量，以便保留超时/超支事实。
 
 协议对象不是不可变存储。嵌套列表修改、直接赋值或 `model_copy(update=...)` 不自动完成全状态校验；在后续持久化、调度和输出边界调用 `DiagnosisState.model_validate`（对象会重新校验）或 `model_validate_json`。
+
+## Step 03：宿主取证接口
+
+`MaterialRegistry.register` 只在用户指定的独立根目录内登记显式相对路径，先校验扩展名、文件类型、2 MiB 实际字节上限与 UTF-8 文本，再分配 `A001…`。`origin=local` 是新增的兼容取值，表示本地材料输入，不代表执行了本机探针。最多 10 份材料，记录保持 `pending` 脱敏状态。内容在登记时固定，后续工具按 ID 读取内存副本。
+
+`AuthorizedRoot` 使用 POSIX 目录描述符逐级打开，不跟随符号链接，拒绝硬链接、非普通文件、隐藏路径、`..` 和 `benchmark/gold`。目录描述符可防止已打开根目录被替换为链接后转向其他目录；不宣称抵御具有系统级权限的攻击者。用户自行复制的文件内容不会因为原来源而被识别为 gold，运行时仍须保持只登记授权材料的边界。
+
+`CollectionSession` 当前提供三个宿主方法：
+
+| 方法 | 输出与边界 |
+|---|---|
+| `parse_log(artifact_id, context_lines=5)` | 普通 Python 异常摘要、原始日志行号、文件/行号/函数堆栈位置与有限上下文；保留最近 5 个异常和 10 个帧，不判断根因 |
+| `read_artifact(artifact_id, start_line=1, max_lines=200)` | 最多 200 行、16,000 字符；保留起止行和截断标志，不执行 Python 或解析 YAML |
+| `inspect_snapshot(artifact_id, as_target=True)` | 以 `inspect_environment` 记录快照模式结果；校验快照及环境 ID 冲突，证据保留采集时间、JSON Pointer 与原始 JSON 值 |
+
+快照宿主接口显式绑定材料 ID；未来模型调度层需把动作协议的 `environment_id/probe_ids` 映射到授权快照及固定探针，当前不接受模型直接调度。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
+
+工具结果完整 JSON 最多 64 KiB；输出过大明确拒绝，不能静默当作完整观察。证据内容总量另受材料大小和片段上限约束。读取片段时只要省略原文部分就标记 `truncated`。日志支持常见 Python traceback 和异常链；分布式前缀、多语言日志、ExceptionGroup 树形堆栈尚未专门支持。无匹配时返回空异常列表，不编造结果。
+
+`EvidenceRegistry` 根据来源、位置、内容、时间与截断标记去重；重复读取复用证据 ID，工具调用仍记录新 `T001…`，尚未实现工具缓存。每次工具执行后重新校验完整状态。工具历史记录失败，未知材料 ID 返回 `denied`，非法参数/快照返回 `error`，二者不携带成功 data。登记阶段失败则中止 CLI，不构造不完整会话。
+
+取证输出是 `DiagnosisState` 而非最终诊断报告，不填充假设、报告或诊断停止原因；调用数与取证会话耗时会记录，预算上限/超时/自动清理尚未执行。所有输出只在本地，未经脱敏。

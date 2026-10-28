@@ -1,1 +1,1 @@
-"""Artifact access boundaries and redaction (planned)."""
+"""Artifact access boundaries; automatic redaction is not implemented yet."""

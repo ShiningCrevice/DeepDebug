@@ -66,7 +66,7 @@ class Artifact(Contract):
     artifact_id: ArtifactId
     kind: Literal["log", "code", "config", "snapshot"]
     display_name: Text
-    origin: Literal["upload", "paste", "fixture"]
+    origin: Literal["upload", "paste", "fixture", "local"]
     size_bytes: Annotated[int, Field(strict=True, ge=0, le=2 * 1024 * 1024)]
     redaction_status: Literal["pending", "reviewed"] = "pending"
     # Filesystem paths belong in the future server-side registry, not model actions.
