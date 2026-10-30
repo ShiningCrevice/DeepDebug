@@ -11,26 +11,37 @@
 | 自动诊断端到端案例 | 0 / 5 | 当前只跑通两个案例的取证，不含模型循环 |
 | 文档语料 | 0 / 15～25 | 尚未整理与检索 |
 
-整体工程完成度粗估 **约 20%（18%～22%）**：按规划 72 小时权重，用第 1 周 75%～85%、第 2 周 45%～60% 的工作完成估计折算，其他周暂不计完成量。此估算不是实耗工时、诊断准确率或剩余时间承诺；优先以可验收项判断进度。后续每步汇报同步更新此表。
+整体工程完成度估算 **约 20%（18%～22%）**：按规划 72 小时权重，以第 1 周完成 75%～85%、第 2 周完成 45%～60% 折算，其他周暂不计完成量。该比例衡量工程交付，不表示实耗工时或诊断效果。
+
+当前完成第 1 周的协议与人工参考诊断、第 2 周的 CLI 取证。取证输出未经脱敏，仅供本地检查；自动诊断、用户环境采集、GPU 探测、路径引用检查、检索、工具超时和预算停止仍待实现。Windows 取证暂不支持。
+
+各步验证环境为 Linux / Python 3.12.3，其他平台与 Python 版本未验证。检查命令见 [README](../README.md#开发检查)；受限环境使用 `UV_CACHE_DIR=/tmp/deepdebug-uv-cache`。历史安装或构建曾因网络受限、构建缓存缺失而失败，补齐既有依赖后通过；离线复现需要先准备依赖缓存。
+
+## Step 05 — 文档表述整理（2026-10-30）
+
+完成范围：
+
+- `docs/progress.md`：为各步补充主要代码文件，合并重复限制，验证结果保留检查结论和关键实跑数据。
+- `README.md`、`docs/design.md`、`docs/tool-api.md`：精简重复说明，将能力限制放在相关接口或结果旁。
+- `AGENTS.md`：明确进度记录的文件定位与验证摘要要求。
+
+验证结果：Ruff 检查与格式检查、pytest **98 项**、`git diff --check` 通过。
+
+下一步：完善用户环境采集、路径引用检查和无 GPU 降级，再补齐其余故障种子与文档检索。
 
 ## Step 04 — 结构精简（2026-10-30）
 
-检查结论与修改：
+完成范围：
 
-- `llm/`、`reporting/` 只有包说明，无实现或调用；删除占位包，后续按功能创建。
-- 快照先由 `load_snapshot` 解析校验，随后会话再次解析同一 JSON；改为一次解析返回校验模型与原始值，证据保留原始字段，不引入模型默认值或规范化文本。
-- 快照错误原先经过 `ValueError/ValidationError → MaterialError → ValueError → 工具错误` 转换；改由会话统一记录固定错误消息，保留重复键、模式、结构及嵌套过深的错误处理。
-- 材料读取已限制为 2 MiB，UTF-8 解码后的字符数不会超过字节数；删除同值字符数上限，保留实际读取字节上限、UTF-8 与 NUL 检查。
-- 状态/报告重校验、证据副本与文件描述符路径检查承担数据一致性和访问边界职责，保留现有结构。协议供 CLI Schema 导出和开发案例使用，继续保留。
+- `src/deepdebug/tools/environment.py`、`src/deepdebug/tools/session.py`：快照 JSON 解析一次，返回校验模型与原始值；会话统一记录错误，保留重复键、模式、结构及嵌套过深的错误处理。
+- `src/deepdebug/tools/artifacts.py`：删除被 2 MiB 字节上限覆盖的字符数检查，保留 UTF-8 与 NUL 检查。
+- 删除 `src/deepdebug/llm/__init__.py`、`src/deepdebug/reporting/__init__.py` 两个无实现、无调用的占位包，随对应功能创建。
+- `tests/test_collection.py`：新增 4 项检查，覆盖 ASCII/多字节文本大小边界、嵌套过深的 JSON 错误，以及快照证据保留原始值。
 
-验证结果（Linux / Python 3.12.3）：
+验证结果：
 
-- `uv run --locked ruff check .`、`uv run --locked ruff format --check .` 通过。
-- `uv run --locked pytest`：**98 项通过**。新增 4 项检查，覆盖 ASCII/多字节文本的 2 MiB 接受与超限拒绝、嵌套过深的 JSON 错误记录、快照原始值与默认字段的证据区分。
-- `uv build` 成功生成 sdist，并从 sdist 构建 wheel。首次受限网络构建失败，离线重试确认缺少 Hatchling 缓存；获准联网获取已声明的构建依赖后通过。
-- `git diff --check` 通过。检查使用 `/tmp/deepdebug-uv-cache`。
-
-进度：本步整理第 1 周协议与第 2 周工具层实现，验收项保持第 1 周 **2/3**、第 2 周 **1/3**，完整里程碑 **0/6**；整体工程估算仍为 **约 20%（18%～22%）**。结构精简未增加自动诊断能力。
+- Ruff 检查与格式检查、pytest **98 项**、`git diff --check` 通过。
+- `uv build` 通过，生成 sdist 和 wheel。
 
 下一步：完善用户环境采集、路径引用检查和无 GPU 降级，再补齐其余故障种子与文档检索。
 
@@ -38,21 +49,18 @@
 
 完成范围：
 
-- 新增 `collect`：显式登记日志、代码、配置及快照，输出带真实工具记录的状态 JSON。
-- 用 POSIX 目录描述符逐级读取文件，拒绝路径越界、链接、非普通文件、隐藏路径、仓库根目录与 benchmark 答案目录；落实单文件 2 MiB、每会话 10 份和 UTF-8 检查。
-- 登记时固定材料内容；日志提取原始行号与有限堆栈，文本读取限制为 200 行/16,000 字符，工具结果限制 64 KiB。
-- 快照读取保留环境标识与采集时间；目标快照无效时不回退到对照环境或开发机。
-- 证据按内容及来源去重复用编号；工具失败进入历史，每次更新重新校验状态。
+- `src/deepdebug/cli.py`、`src/deepdebug/collection.py`：新增 `collect`，显式登记日志、代码、配置及快照，输出带工具记录的状态 JSON。
+- `src/deepdebug/security/paths.py`：用 POSIX 目录描述符逐级读取文件，拒绝路径越界、链接、非普通文件、隐藏路径、仓库根目录与 benchmark 答案目录。
+- `src/deepdebug/tools/artifacts.py`：登记时固定材料内容，限制单文件 2 MiB、每会话 10 份和 UTF-8 编码；文本读取最多 200 行、16,000 字符。
+- `src/deepdebug/tools/log_parser.py`、`src/deepdebug/tools/environment.py`：提取异常、有限堆栈及原始行号；读取快照并保留环境标识、采集时间。
+- `src/deepdebug/tools/session.py`、`src/deepdebug/agent/evidence.py`、`src/deepdebug/agent/schemas.py`：按内容与来源去重复用证据 ID，登记本地材料来源；工具失败进入历史，完整结果限制 64 KiB，每次更新重校验状态。目标快照无效时保持目标未知。
+- `tests/test_collection.py`：新增 35 项工具与集成检查，覆盖文件边界、材料限制、证据位置、快照错误、日志截断及输入代码只读。
 
-验证结果（Linux / Python 3.12.3）：
+验证结果：
 
-- `ruff check .`、`ruff format --check .` 通过；`pytest` **94 项通过**。
-- 新增 35 项工具/集成检查：目录穿越、答案目录、符号/硬链接、FIFO、根目录替换、大小/数量/编码限制、未知 ID、非法快照、目标环境不被替换、原始证据位置、长日志截断和输入代码不执行。
-- CLI 实跑 `dep_002`：5 份材料、10 条证据、5 次成功工具调用；目标为 `ENV_EMPTY`，`report=null`。两个开发案例的取证均已通过集成测试。
-- `uv build` 成功构建 sdist，并从 sdist 构建 wheel；首次离线构建因缓存缺少 Hatchling 失败，获准联网补齐既有构建依赖后成功。
-- `git diff --check` 通过。没有增加运行依赖，锁文件未改变。
-
-边界：本次完成第 2 周的部分工具层，不是第 2 周整体验收。实际验证平台为 Linux；Windows 取证暂不支持。没有模型调用、GPU 探测、文档检索、自动脱敏、超时控制或预算强制停止；CLI 输出未经脱敏，不生成诊断报告或修复结论。所有用例中的代码只作文本读取。
+- Ruff 检查与格式检查、pytest **94 项**、`git diff --check` 通过；两个开发案例取证通过集成测试。
+- CLI 实跑 `dep_002`：5 份材料、10 条证据、5 次成功工具调用，目标为 `ENV_EMPTY`，`report=null`。
+- `uv build` 通过，生成 sdist 和 wheel；运行依赖及锁文件保持不变。
 
 下一步：完善用户环境采集、路径引用检查和无 GPU 降级，并推进其余故障种子与文档检索。
 
@@ -60,23 +68,19 @@
 
 完成范围：
 
-- 使用 Pydantic 定义材料、证据、环境快照、动作、工具结果、预算、会话状态和诊断报告；拒绝未知字段和无效引用。
-- 动作按工具名校验参数；报告核对证据、环境、当前假设和工具历史，验证状态必须与执行记录一致。
-- CLI 新增 `schema action/state/report/snapshot`，可导出 JSON Schema。
-- 实际采集两个相同缺包日志、不同环境上下文的开发案例，记录时间、来源及路径替换；两例同属一个案例族且留在开发集。
-- 增加固定开发采集脚本和人工参考状态/报告。原始输入与参考答案分目录保存；修复验证明确为“未执行”。
+- `src/deepdebug/agent/schemas.py`、`src/deepdebug/agent/actions.py`、`src/deepdebug/agent/state.py`：用 Pydantic 定义材料、证据、快照、动作、工具结果、预算、状态和报告；校验工具参数、跨记录引用及验证状态。
+- `src/deepdebug/cli.py`：新增 `schema action/state/report/snapshot`，导出 JSON Schema。
+- `scripts/capture_dependency_cases.py`、`benchmark/dev/dep_001/`、`benchmark/dev/dep_002/`：采集两个相同缺包日志、不同环境上下文的案例，记录来源、时间和路径替换；两例同属一个案例族，均留在开发集。
+- `benchmark/gold/dev/`：保存人工参考状态与报告，与输入材料分开；修复验证为“未执行”。
+- `tests/test_protocols.py`、`tests/test_dev_cases.py`、`tests/test_cli.py`：覆盖动作白名单、字段限制、引用和验证状态、JSON 往返、Schema 导出及原始证据位置。
 
-验证结果（Linux / Python 3.12.3）：
+验证结果：
 
-- 固定采集脚本成功取得两个真实失败日志及目标/项目环境快照；路径已替换为 `/demo/` 别名。
-- `ruff check .` 与 `ruff format --check .` 通过。
-- `pytest`：59 项通过，包括动作白名单、字段/数量限制、跨记录引用、验证状态、JSON 往返、4 种 CLI Schema 导出、原始行号/字段内容与环境来源核对。
-- `uv build --offline` 成功构建 sdist，并从 sdist 构建 wheel。
-- `git diff --check` 通过。
+- Ruff 检查与格式检查、pytest **59 项**、`git diff --check` 通过。
+- 采集脚本取得两个真实失败日志及目标/项目快照，路径替换为 `/demo/` 别名。
+- `uv build --offline` 通过，生成 sdist 和 wheel；运行依赖及锁文件保持不变。
 
-本环境使用 `/tmp/deepdebug-uv-cache`；因构建缓存缺失，获准联网补齐既有构建依赖后完成离线检查。未增加运行依赖，`uv.lock` 保持不变。
-
-边界：此阶段不执行自动诊断、工具调度、模型调用、修复或 GPU/PyTorch 训练。Schema 校验不等于文件权限、脱敏、预算执行或证据语义正确；实际文件读取和执行记录必须由后续工具层登记。参考报告为人工编写，不是 Agent 输出或评测结果。
+阶段范围：协议负责结构与一致性校验；文件权限、脱敏、预算执行和证据语义由后续工具与控制器落实。案例覆盖 Python 依赖导入，未执行修复或 PyTorch/GPU 训练。
 
 下一步：实现材料登记与路径权限、保留行号的日志解析、快照读取、稳定证据编号，并通过 CLI 展示取证结果。
 
@@ -84,21 +88,15 @@
 
 完成范围：
 
-- 建立 `src/` Python 包与 CLI，支持帮助、版本和模块启动。
-- 配置 uv、Pydantic v2、pytest、Ruff 与构建后端，锁定依赖。
-- 预留 Agent、工具、权限、模型接口、报告、案例与评测目录。
-- 添加 README、AGENTS.md、架构决策、环境配置说明与敏感数据忽略规则。
+- `src/deepdebug/cli.py`、`src/deepdebug/__main__.py`：建立 `src/` 包和 CLI，支持帮助、版本及模块启动。
+- `pyproject.toml`、`uv.lock`、`.python-version`：配置 Python 版本、uv、Pydantic v2、pytest、Ruff 和构建后端，锁定依赖。
+- `src/deepdebug/`、`benchmark/`：预留 Agent、工具、权限、模型接口、报告、案例和评测目录。
+- `README.md`、`AGENTS.md`、`docs/design.md`、`.env.example`、`.gitignore`：记录开发约定、架构决策、环境配置及敏感数据忽略规则。
+- `tests/test_cli.py`：检查安装入口、模块入口和未知命令拒绝。
 
-验证结果（Linux / Python 3.12.3）：
+验证结果：
 
-- `uv sync` 成功，生成 `uv.lock`；受限网络首次安装失败后，获准联网安装完成。
-- `ruff check .` 与 `ruff format --check .` 通过。
-- `pytest`：3 项通过，覆盖安装入口、模块入口和未知命令拒绝。
-- `uv build --offline` 成功生成 sdist，并从 sdist 构建 wheel。
-- `deepdebug --help` 正确显示初始化阶段说明。
+- `uv sync`、Ruff 检查与格式检查、pytest **3 项**通过；`deepdebug --help` 显示初始化说明。
+- `uv build --offline` 通过，生成 sdist 和 wheel。
 
-本环境检查通过 `--cache-dir /tmp/deepdebug-uv-cache` 使用可写缓存目录；普通开发环境可直接使用 README 命令。其他 Python 版本和操作系统尚未实际验证。
-
-边界：本次仅初始化，不代表第一周里程碑整体完成；尚无诊断、环境采集、模型调用、Web 页面或评测结果。无需 GPU 与 API key。
-
-下一步：准备缺少依赖与错误解释器两个开发案例；定义材料、证据、工具返回、动作、状态、报告的 Pydantic 结构，建立协议验证。
+下一步：准备缺少依赖与错误解释器两个开发案例，定义材料、工具返回、状态、动作与报告协议。
