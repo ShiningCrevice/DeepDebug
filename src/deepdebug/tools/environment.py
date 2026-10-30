@@ -2,10 +2,7 @@
 
 import json
 
-from pydantic import ValidationError
-
 from deepdebug.agent.schemas import EnvironmentSnapshot
-from deepdebug.security.paths import MaterialError
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict:
@@ -17,14 +14,10 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
-def load_snapshot(text: str) -> EnvironmentSnapshot:
-    try:
-        data = json.loads(text, object_pairs_hook=_unique_object)
-        snapshot = EnvironmentSnapshot.model_validate(data)
-        if snapshot.environment.mode != "snapshot":
-            raise ValueError("imported data must declare snapshot mode")
-        return snapshot
-    except (ValueError, ValidationError, RecursionError) as exc:
-        raise MaterialError(
-            "环境快照格式无效；需使用带时区时间和 snapshot 模式的 v1 快照。"
-        ) from exc
+def load_snapshot(text: str) -> tuple[EnvironmentSnapshot, dict]:
+    """Return validated fields and original JSON values for evidence from one parse."""
+    data = json.loads(text, object_pairs_hook=_unique_object)
+    snapshot = EnvironmentSnapshot.model_validate(data)
+    if snapshot.environment.mode != "snapshot":
+        raise ValueError("imported data must declare snapshot mode")
+    return snapshot, data

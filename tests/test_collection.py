@@ -112,6 +112,20 @@ def test_bad_material_bytes_are_rejected(tmp_path: Path, content: bytes) -> None
         register(tmp_path, "log.txt")
 
 
+@pytest.mark.parametrize("character", ["x", "界"])
+def test_material_size_limit_counts_utf8_bytes(tmp_path: Path, character: str) -> None:
+    content = character * (MAX_FILE_BYTES // len(character.encode("utf-8")))
+    content += "x" * (MAX_FILE_BYTES - len(content.encode("utf-8")))
+    path = tmp_path / "log.txt"
+    path.write_text(content, encoding="utf-8")
+    registry, artifact_id = register(tmp_path, "log.txt")
+    assert registry.get(artifact_id).text == content
+    assert registry.get(artifact_id).artifact.size_bytes == MAX_FILE_BYTES
+    path.write_text(content + character, encoding="utf-8")
+    with pytest.raises(MaterialError, match="2 MiB"):
+        register(tmp_path, "log.txt")
+
+
 def test_count_limit_and_duplicate_registration(tmp_path: Path) -> None:
     registry = MaterialRegistry()
     with AuthorizedRoot(tmp_path) as authorized:
@@ -166,6 +180,7 @@ def test_code_and_injected_log_instructions_are_only_text(tmp_path: Path) -> Non
         "{broken",
         '{"environment":{},"environment":{}}',
         '{"password":"dummy-sensitive","schema_version":"99"}',
+        "[" * 2000 + "]" * 2000,
     ],
 )
 def test_invalid_snapshot_records_safe_error(tmp_path: Path, content: str) -> None:
@@ -176,6 +191,32 @@ def test_invalid_snapshot_records_safe_error(tmp_path: Path, content: str) -> No
     assert result.status == "error" and result.data == {} and result.evidence_ids == []
     assert "dummy-sensitive" not in state.model_dump_json()
     assert state.target_environment is None
+
+
+def test_snapshot_evidence_preserves_original_values(tmp_path: Path) -> None:
+    raw = {
+        "environment": {
+            "environment_id": " ENV_TEST ",
+            "interpreter": " /demo/python ",
+            "collected_at": "2026-10-30T08:00:00+08:00",
+        },
+        "python_version": " 3.12 ",
+        "packages": [{"name": "missing", "status": "not_found"}],
+    }
+    (tmp_path / "snapshot.json").write_text(json.dumps(raw))
+    registry, artifact_id = register(tmp_path, "snapshot.json", "snapshot")
+    session = CollectionSession(registry)
+    result = session.inspect_snapshot(artifact_id)
+    assert result.status == "ok"
+    assert result.data["environment"]["environment_id"] == "ENV_TEST"
+    assert result.data["environment"]["mode"] == "snapshot"
+    assert result.data["packages"][0]["version"] is None
+    observed = {e.location.pointer: json.loads(e.content) for e in session.state.evidence}
+    assert observed == {
+        "/environment": raw["environment"],
+        "/python_version": raw["python_version"],
+        "/packages/0": raw["packages"][0],
+    }
 
 
 def test_bad_target_does_not_silently_select_comparison_environment(tmp_path: Path) -> None:

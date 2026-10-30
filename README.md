@@ -77,14 +77,14 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 | `src/deepdebug/security/` | 已实现只读路径边界；自动脱敏待实现 |
 | `src/deepdebug/agent/evidence.py` | 会话内稳定证据编号与去重 |
 | `src/deepdebug/collection.py` | 宿主驱动的 CLI 取证流程 |
-| `src/deepdebug/llm/` | 后续统一模型接口 |
-| `src/deepdebug/reporting/` | 后续报告校验与导出 |
 | `tests/` | 自动化检查 |
 | `docs/` | 架构决策与逐步进度 |
 | `benchmark/`、`scripts/` | 两个开发案例、人工参考状态和开发案例采集脚本 |
 | `examples/`、`knowledge/` | 演示材料与文档语料的预留位置 |
 
-模型与报告渲染包仍为预留位置。Streamlit、模型 SDK 和检索依赖在对应阶段引入。
+模型接口与报告渲染模块在实现对应功能时创建。Streamlit、模型 SDK 和检索依赖在对应阶段引入。
+
+结构精简（2026-10-30）：移除无实现与调用的模型/报告占位包；快照只解析一次 JSON，同时保留校验后的字段与用于证据的原始值，错误统一在工具会话边界记录。材料大小由读取层的 2 MiB 字节上限控制，移除同值字符数检查；UTF-8 与 NUL 检查继续生效。检查结果见 [Step 04](docs/progress.md#step-04--结构精简2026-10-30)。
 
 ## 范围与边界
 

@@ -8,7 +8,6 @@ from typing import Literal
 from deepdebug.agent.schemas import Artifact
 from deepdebug.security.paths import AuthorizedRoot, MaterialError
 
-MAX_TEXT_CHARS = 2 * 1024 * 1024
 MAX_EXCERPT_CHARS = 16_000
 SUFFIXES = {
     "log": {".txt", ".log"},
@@ -48,8 +47,8 @@ class MaterialRegistry:
             text = raw.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise MaterialError("材料必须是 UTF-8 文本。") from exc
-        if "\x00" in text or len(text) > MAX_TEXT_CHARS:
-            raise MaterialError("材料包含二进制内容或文本过长。")
+        if "\x00" in text:
+            raise MaterialError("材料包含二进制内容。")
         artifact = Artifact(
             artifact_id=f"A{len(self._items) + 1:03}",
             kind=kind,

@@ -7,8 +7,6 @@ from datetime import datetime, timezone
 from time import monotonic
 from uuid import uuid4
 
-from pydantic import ValidationError
-
 from deepdebug.agent.actions import ParseLogArguments, ReadArtifactArguments
 from deepdebug.agent.evidence import EvidenceRegistry
 from deepdebug.agent.schemas import (
@@ -71,7 +69,7 @@ class CollectionSession:
                 raise MaterialError("工具结果超过 64 KiB；请缩小材料或读取范围。")
         except MaterialError as exc:
             status, error = "denied", str(exc)
-        except (ValidationError, ValueError):
+        except (ValueError, RecursionError):
             # Validation details may contain raw input: only expose a fixed message.
             status, error = "error", "工具参数或材料结构无效。"
         if error:
@@ -218,10 +216,7 @@ class CollectionSession:
         def operation(item):
             if item.artifact.kind != "snapshot":
                 raise MaterialError("环境检查只能读取登记为 snapshot 的材料。")
-            try:
-                snapshot = load_snapshot(item.text)
-            except MaterialError as exc:
-                raise ValueError("invalid snapshot") from exc
+            snapshot, raw = load_snapshot(item.text)
             target = snapshot.environment
             # Duplicate IDs for different snapshots make future environment selection ambiguous.
             for record in self.state.tool_history:
@@ -233,7 +228,6 @@ class CollectionSession:
                 ):
                     raise ValueError("ambiguous environment ID")
             # Use the original JSON values, so omitted optional fields aren't invented evidence.
-            raw = json.loads(item.text)
             source = Source(kind="snapshot", id=artifact_id, environment_id=target.environment_id)
             observations = [
                 dict(
