@@ -136,11 +136,73 @@ class PackageObservation(Contract):
         return self
 
 
+class ProbeObservation(Contract):
+    status: Literal["ok", "unavailable", "timeout", "error"]
+    collected_at: AwareDatetime
+    error: Text | None = None
+
+    @model_validator(mode="after")
+    def explicit_failure(self) -> "ProbeObservation":
+        if (self.status == "ok") != (self.error is None):
+            raise ValueError("probe failure requires an error")
+        return self
+
+
+class TorchCudaObservation(ProbeObservation):
+    torch_version: Text | None = None
+    cuda_version: Text | None = None
+    cuda_available: StrictBool | None = None
+    device_count: Count | None = None
+
+    @model_validator(mode="after")
+    def consistent_result(self) -> "TorchCudaObservation":
+        if self.status == "ok":
+            if (
+                self.torch_version is None
+                or self.cuda_available is None
+                or self.device_count is None
+            ):
+                raise ValueError("successful torch probe requires version and availability")
+            if self.cuda_available != (self.device_count > 0):
+                raise ValueError("CUDA availability and device count disagree")
+        elif any(
+            value is not None
+            for value in (
+                self.torch_version,
+                self.cuda_version,
+                self.cuda_available,
+                self.device_count,
+            )
+        ):
+            raise ValueError("failed torch probe cannot contain success fields")
+        return self
+
+
+class GpuDevice(Contract):
+    index: Count
+    name: Text
+    memory_total_mib: Count
+    memory_used_mib: Count
+
+
+class GpuObservation(ProbeObservation):
+    devices: list[GpuDevice] = Field(default_factory=list, max_length=64)
+
+    @model_validator(mode="after")
+    def consistent_result(self) -> "GpuObservation":
+        if (self.status == "ok") != bool(self.devices):
+            raise ValueError("only successful GPU probes contain devices")
+        unique_ids([str(device.index) for device in self.devices], "GPU indices")
+        return self
+
+
 class EnvironmentSnapshot(Contract):
     schema_version: Literal["1"] = "1"
     environment: TargetEnvironment
     python_version: Text
     packages: list[PackageObservation] = Field(default_factory=list)
+    torch_cuda: TorchCudaObservation | None = None
+    gpu: GpuObservation | None = None
 
     @model_validator(mode="after")
     def unique_packages(self) -> "EnvironmentSnapshot":

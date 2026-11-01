@@ -52,6 +52,7 @@ class AuthorizedRoot:
         try:
             self._fd = open_directory(root)
             self._root_parts = root.parts
+            self.display_path = str(root)
         except OSError as exc:
             raise MaterialError("材料根目录不可读取，或包含符号链接。") from exc
 
@@ -86,5 +87,34 @@ class AuthorizedRoot:
                 return data
         except OSError as exc:
             raise MaterialError("材料不存在、不可读取或包含符号链接。") from exc
+        finally:
+            os.close(fd)
+
+    def inspect(self, relative: str) -> dict:
+        """Inspect one explicit reference without reading contents or listing siblings."""
+        path = Path(relative)
+        if path.is_absolute() or not path.parts or "\\" in relative or "\x00" in relative:
+            raise MaterialError("路径引用必须是授权根目录内的相对路径。")
+        check_parts((*self._root_parts, *path.parts))
+        fd = os.dup(self._fd)
+        try:
+            for part in path.parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            info = os.stat(path.name, dir_fd=fd, follow_symlinks=False)
+            if stat.S_ISLNK(info.st_mode):
+                raise MaterialError("路径引用不能包含符号链接。")
+            if stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
+                kind = "file"
+            elif stat.S_ISDIR(info.st_mode):
+                kind = "directory"
+            else:
+                raise MaterialError("路径引用只接受普通文件和目录，拒绝硬链接。")
+            return {"exists": True, "type": kind}
+        except FileNotFoundError:
+            return {"exists": False, "type": None}
+        except OSError as exc:
+            raise MaterialError("路径引用不可检查，或包含链接/非目录中间节点。") from exc
         finally:
             os.close(fd)

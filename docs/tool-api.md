@@ -7,7 +7,7 @@
 | 类型 | 约束与用途 |
 |---|---|
 | `Artifact` | 材料 ID、类型、显示名、来源、声明大小、脱敏审阅状态；声明大小上限 2 MiB，不含服务器路径 |
-| `EnvironmentSnapshot` | 环境标识、解释器、带时区采集时间、Python 版本、指定包元数据；缺包与查询失败分开表示 |
+| `EnvironmentSnapshot` | 环境标识、解释器、带时区采集时间、Python 版本、指定包元数据，可选 PyTorch/CUDA 与 GPU 观察；缺包与查询失败分开表示 |
 | `Evidence` | 稳定 ID、来源、原始行号或 JSON Pointer、原始内容、采集时间与截断标记 |
 | `Hypothesis` | 原因、置信度标签、支持/反对证据、待检查项；最多 3 个候选 |
 | `ToolResult` | `ok/unavailable/denied/timeout/error`；非成功必须说明原因，不接受正常结果 data |
@@ -16,7 +16,7 @@
 
 协议拒绝未知字段；计数必须是整数，不能用布尔值充当。所有采集/执行时间必须带时区。环境观察需要环境标识；文档观察需要来源 URL 和适用版本（采集日期由 Evidence.collected_at 表示）。材料 ID 用 `A001`，证据用 `E001`，假设用 `H1`，工具调用用 `T001`。
 
-快照中的“not_found”仅表示没有查到该分发包元数据，不能单独证明任意 import 一定失败。`EnvironmentSnapshot` 当前仅包含首批案例需要的 Python 与包元数据，CUDA/GPU 字段在环境工具阶段添加。`target_environment=null` 明确表示目标环境尚未确定。
+快照中的“not_found”仅表示没有查到该分发包元数据，不能单独证明任意 import 一定失败。`EnvironmentSnapshot` 的可选 `torch_cuda/gpu` 字段兼容旧快照，缺失或 null 表示未采集；采集后的状态为 `ok/unavailable/timeout/error`，失败必须带 `error` 且不能携带成功数据。PyTorch 成功观察包含版本、CUDA 可用性和设备数，编译 CUDA 版本可为 null；GPU 成功观察包含非空设备列表及 MiB 显存摘要。两种观察各有带时区采样时间。`target_environment=null` 明确表示目标环境尚未确定。
 
 ## 动作协议
 
@@ -37,7 +37,7 @@
 
 七个规划工具均有参数类型：日志解析、材料读取、路径检查、环境检查、GPU 查询、文档检索和内置检查。读取最多 200 行，路径检查最多 10 个登记引用，检索最多 3 条。探针只允许 `python_identity/package_metadata/torch_cuda`；`dependency_import/interpreter_identity` 是预留的内置检查 ID，当前没有执行器。`need_info` 必须给出具体问题。
 
-环境 ID 和路径引用 ID 是不透明标识，执行授权由后续工具注册表检查。单次错误动作重试、缓存和停止策略由后续控制器落实。
+环境 ID 和路径引用 ID 是不透明标识。宿主现已可显式登记路径并按引用 ID 检查；模型动作到环境/路径注册表的调度、错误动作重试、缓存和停止策略由后续控制器落实。
 
 ## 报告与状态一致性
 
@@ -61,13 +61,15 @@
 
 `AuthorizedRoot` 使用 POSIX 目录描述符逐级打开，不跟随符号链接，拒绝硬链接、非普通文件、隐藏路径、`..` 和 `benchmark/gold`。目录描述符可防止已打开根目录被替换为链接后转向其他目录；该边界不覆盖系统级权限攻击。路径检查无法识别用户复制到其他位置的 gold 内容，运行时只应登记授权材料。
 
-`CollectionSession` 当前提供三个宿主方法：
+`CollectionSession` 当前提供五个宿主方法：
 
 | 方法 | 输出与边界 |
 |---|---|
 | `parse_log(artifact_id, context_lines=5)` | 普通 Python 异常摘要、原始日志行号、文件/行号/函数堆栈位置与有限上下文；保留最近 5 个异常和 10 个帧，不判断根因 |
 | `read_artifact(artifact_id, start_line=1, max_lines=200)` | 最多 200 行、16,000 字符；保留起止行和截断标志，不执行 Python 或解析 YAML |
 | `inspect_snapshot(artifact_id, as_target=True)` | 以 `inspect_environment` 记录快照模式结果；校验快照及环境 ID 冲突，证据保留采集时间、JSON Pointer 与原始 JSON 值 |
+| `query_gpu(artifact_id)` | 读取已登记快照的 GPU 字段，成功证据指向 `/gpu`；保留采样时间，失败状态进入历史，缺字段返回 `unavailable` |
+| `check_paths(references, reference_ids)` | 查询宿主已登记的最多 10 个路径引用，结果含存在性、文件/目录类型和授权基准目录；观察来源为 `local/collector` |
 
 快照宿主接口显式绑定材料 ID；未来模型调度层需把动作协议的 `environment_id/probe_ids` 映射到授权快照及固定探针，当前不接受模型直接调度。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
 
@@ -75,4 +77,16 @@
 
 `EvidenceRegistry` 根据来源、位置、内容、时间与截断标记去重；重复读取复用证据 ID，工具调用仍记录新 `T001…`，尚未实现工具缓存。每次工具执行后重新校验完整状态。工具历史记录失败，未知材料 ID 返回 `denied`，非法参数/快照返回 `error`，二者不携带成功 data。登记阶段失败则中止 CLI，不构造不完整会话。
 
-取证输出 `DiagnosisState`，假设列表为空，报告与诊断停止原因为 null。调用数与取证会话耗时会记录，预算上限、超时和自动清理尚未执行。所有输出只在本地，未经脱敏。
+取证输出 `DiagnosisState`，假设列表为空，报告与诊断停止原因为 null。调用数与取证会话耗时会记录，预算上限和自动清理尚未执行。固定环境子进程已执行单次超时和输出限制。所有输出只在本地，未经脱敏。
+
+## Step 06：环境采集与路径引用
+
+`capture_environment(interpreter, environment_id, packages, torch_cuda=False, gpu=False)` 由宿主显式调用，返回可导入的 `EnvironmentSnapshot`。CLI `snapshot` 与 `scripts/collect_environment.py` 共用入口，要求解释器绝对路径和环境标识，包名限制为最多 10 个分发包名称。默认只采集 Python 标识和包元数据；两个可选探针分别通过 `--torch-cuda/--gpu` 启用。
+
+固定 Python 参数为 `-I -c <内置探针> ...`，工作目录为临时目录；包查询使用 `importlib.metadata`。GPU 查询仅从系统 `os.defpath` 查找 `nvidia-smi`，固定参数为 `--query-gpu=index,name,memory.total,memory.used --format=csv,noheader,nounits`。元数据限时 10 秒，其余探针各 15 秒；`process.run_probe` 对合并 stdout/stderr 读取上限 64 KiB，超时/超限终止并回收探针。该执行器是内部实现，模型没有任意命令入口。
+
+Python 身份采集失败不输出快照；可选探针失败时仍保留 Python 信息与各探针状态。CPU-only PyTorch 可成功返回 `cuda_available=false`；缺少 PyTorch、未找到 GPU 程序或查询列表为空时为 `unavailable`，非零退出或无效输出为 `error`。`inspect_snapshot` 的成功表示读取有效快照，各探针的失败仍作为原始数据保留；`query_gpu` 将 GPU 失败状态写入工具结果，并保留快照来源和采样时间。GPU 查询不改变会话目标环境。
+
+`PathReferences` 由宿主绑定一个 `AuthorizedRoot`，显式登记相对路径后返回 `P001…`。CLI `--path` 登记引用，`--path-root` 指定授权基准目录（默认材料根目录）。检查使用保持打开的目录描述符，只做逐级目录访问与最终节点 stat，拒绝符号链接、硬链接、特殊文件、隐藏路径、越界及 gold；不扫描配置或遍历目录。路径缺失返回成功结果中的 `exists=false/type=null`；未登记 ID 或越权返回 `denied`，参数数量非法返回 `error`。批量中任一引用失败时整次结果失败，不登记部分成功证据。
+
+路径结果包含授权时的基准目录名称，来源 `local/collector` 表示命令运行主机，采集时间是检查时刻。与目标环境的关联需要用户提供事实，不能由导入快照推定。该目录句柄须保持打开直到检查完成；材料读取仍使用登记时固定内容。

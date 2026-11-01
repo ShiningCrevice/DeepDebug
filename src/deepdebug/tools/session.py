@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from time import monotonic
 from uuid import uuid4
 
-from deepdebug.agent.actions import ParseLogArguments, ReadArtifactArguments
+from deepdebug.agent.actions import CheckPathsArguments, ParseLogArguments, ReadArtifactArguments
 from deepdebug.agent.evidence import EvidenceRegistry
 from deepdebug.agent.schemas import (
     FieldLocation,
@@ -23,9 +23,18 @@ from deepdebug.security.paths import MaterialError
 from deepdebug.tools.artifacts import Excerpt, MaterialRegistry, RegisteredMaterial, excerpt
 from deepdebug.tools.environment import load_snapshot
 from deepdebug.tools.log_parser import parse_log
+from deepdebug.tools.path_references import PathReferences
 
 MAX_RESULT_BYTES = 64 * 1024
 OperationOutput = tuple[dict, list[dict], bool, TargetEnvironment | None, str | None]
+
+
+class ObservationFailure(Exception):
+    def __init__(self, status: str, error: str, source: Source, collected_at: datetime):
+        self.status = status
+        self.error = error
+        self.source = source
+        self.collected_at = collected_at
 
 
 class CollectionSession:
@@ -38,17 +47,21 @@ class CollectionSession:
     def _run(
         self,
         tool: ToolName,
-        artifact_id: str,
+        artifact_id: str | None,
         purpose: str,
-        operation: Callable[[RegisteredMaterial], OperationOutput],
+        operation: Callable[[RegisteredMaterial | None], OperationOutput],
         *,
         arguments_summary: str,
         as_target: bool = False,
+        local_source: Source | None = None,
     ) -> ToolResult:
         started = monotonic()
         timestamp = datetime.now(timezone.utc)
         # Unknown IDs cannot masquerade as a registered artifact source.
-        source = Source(kind="local", id="material_registry", environment_id="collector")
+        source = local_source or Source(
+            kind="local", id="material_registry", environment_id="collector"
+        )
+        preserve_source = False
         observations: list[dict] = []
         target = None
         summary = None
@@ -57,8 +70,9 @@ class CollectionSession:
         error = None
         status = "ok"
         try:
-            item = self.materials.get(artifact_id)
-            source = Source(kind="artifact", id=item.artifact.artifact_id)
+            item = self.materials.get(artifact_id) if artifact_id is not None else None
+            if item is not None:
+                source = Source(kind="artifact", id=item.artifact.artifact_id)
             data, observations, truncated, target, summary = operation(item)
             if target is not None:
                 source = Source(
@@ -69,12 +83,16 @@ class CollectionSession:
                 raise MaterialError("工具结果超过 64 KiB；请缩小材料或读取范围。")
         except MaterialError as exc:
             status, error = "denied", str(exc)
+        except ObservationFailure as exc:
+            status, error = exc.status, exc.error
+            source, timestamp = exc.source, exc.collected_at
+            preserve_source = True
         except (ValueError, RecursionError):
             # Validation details may contain raw input: only expose a fixed message.
             status, error = "error", "工具参数或材料结构无效。"
         if error:
             data, observations, target, summary, truncated = {}, [], None, None, False
-            if source.kind == "snapshot":
+            if source.kind == "snapshot" and not preserve_source:
                 source = Source(kind="artifact", id=artifact_id)
                 timestamp = datetime.now(timezone.utc)
         candidate_evidence = deepcopy(self.evidence)
@@ -101,7 +119,7 @@ class CollectionSession:
                 status="denied",
                 data={},
                 evidence_ids=[],
-                source=Source(kind="artifact", id=artifact_id),
+                source=Source(kind="artifact", id=artifact_id) if artifact_id else source,
                 collected_at=datetime.now(timezone.utc),
                 duration_ms=result.duration_ms,
                 error="工具结果超过 64 KiB；请缩小材料或读取范围。",
@@ -214,19 +232,8 @@ class CollectionSession:
         """Host binds an explicit artifact; future model dispatch will resolve environment IDs."""
 
         def operation(item):
-            if item.artifact.kind != "snapshot":
-                raise MaterialError("环境检查只能读取登记为 snapshot 的材料。")
-            snapshot, raw = load_snapshot(item.text)
+            snapshot, raw = self._snapshot(item)
             target = snapshot.environment
-            # Duplicate IDs for different snapshots make future environment selection ambiguous.
-            for record in self.state.tool_history:
-                source = record.result.source
-                if (
-                    source.kind == "snapshot"
-                    and source.environment_id == target.environment_id
-                    and source.id != artifact_id
-                ):
-                    raise ValueError("ambiguous environment ID")
             # Use the original JSON values, so omitted optional fields aren't invented evidence.
             source = Source(kind="snapshot", id=artifact_id, environment_id=target.environment_id)
             observations = [
@@ -250,6 +257,15 @@ class CollectionSession:
                         collected_at=target.collected_at,
                     )
                 )
+            if raw.get("torch_cuda") is not None:
+                observations.append(
+                    dict(
+                        source=source,
+                        location=FieldLocation(pointer="/torch_cuda"),
+                        content=json.dumps(raw["torch_cuda"], ensure_ascii=False),
+                        collected_at=snapshot.torch_cuda.collected_at,
+                    )
+                )
             return snapshot.model_dump(mode="json"), observations, False, target, None
 
         return self._run(
@@ -259,4 +275,83 @@ class CollectionSession:
             operation,
             as_target=as_target,
             arguments_summary=f"snapshot_artifact_id={artifact_id}, as_target={as_target}",
+        )
+
+    def query_gpu(self, artifact_id: str) -> ToolResult:
+        def operation(item):
+            snapshot, raw = self._snapshot(item)
+            source = Source(
+                kind="snapshot",
+                id=artifact_id,
+                environment_id=snapshot.environment.environment_id,
+            )
+            gpu = snapshot.gpu
+            if gpu is None:
+                raise ObservationFailure(
+                    "unavailable",
+                    "快照未包含 GPU 采集结果。",
+                    source,
+                    snapshot.environment.collected_at,
+                )
+            if gpu.status != "ok":
+                raise ObservationFailure(gpu.status, gpu.error, source, gpu.collected_at)
+            # The GPU sample has its own time; querying it never replaces the target environment.
+            target = TargetEnvironment(
+                **{**snapshot.environment.model_dump(), "collected_at": gpu.collected_at}
+            )
+            observation = dict(
+                source=source,
+                location=FieldLocation(pointer="/gpu"),
+                content=json.dumps(raw["gpu"], ensure_ascii=False),
+                collected_at=gpu.collected_at,
+            )
+            return raw["gpu"], [observation], False, target, None
+
+        return self._run(
+            "query_gpu",
+            artifact_id,
+            "读取指定快照在采集时刻的 GPU 摘要。",
+            operation,
+            arguments_summary=f"snapshot_artifact_id={artifact_id}",
+        )
+
+    def _snapshot(self, item: RegisteredMaterial):
+        if item.artifact.kind != "snapshot":
+            raise MaterialError("环境检查只能读取登记为 snapshot 的材料。")
+        snapshot, raw = load_snapshot(item.text)
+        for record in self.state.tool_history:
+            source = record.result.source
+            if (
+                source.kind == "snapshot"
+                and source.environment_id == snapshot.environment.environment_id
+                and source.id != item.artifact.artifact_id
+            ):
+                raise ValueError("ambiguous environment ID")
+        return snapshot, raw
+
+    def check_paths(self, references: PathReferences, reference_ids: list[str]) -> ToolResult:
+        source = Source(kind="local", id="path_references", environment_id="collector")
+
+        def operation(_item):
+            args = CheckPathsArguments(path_reference_ids=reference_ids)
+            timestamp = datetime.now(timezone.utc)
+            data = {ref: references.inspect(ref) for ref in args.path_reference_ids}
+            observations = [
+                dict(
+                    source=source,
+                    location=FieldLocation(pointer=f"/{ref}"),
+                    content=json.dumps(value, ensure_ascii=False),
+                    collected_at=timestamp,
+                )
+                for ref, value in data.items()
+            ]
+            return data, observations, False, None, None
+
+        return self._run(
+            "check_paths",
+            None,
+            "检查显式登记的本机路径引用是否存在及其类型。",
+            operation,
+            arguments_summary=f"path_reference_ids={reference_ids}",
+            local_source=source,
         )

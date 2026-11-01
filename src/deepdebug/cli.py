@@ -12,6 +12,7 @@ from deepdebug.agent.schemas import DiagnosisReport, EnvironmentSnapshot
 from deepdebug.agent.state import DiagnosisState
 from deepdebug.collection import collect
 from deepdebug.security.paths import MaterialError
+from deepdebug.tools.capture import CaptureError, capture_environment
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -27,6 +28,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command")
     schema = commands.add_parser("schema", help="输出数据协议的 JSON Schema")
     schema.add_argument("kind", choices=["action", "state", "report", "snapshot"])
+    capture = commands.add_parser("snapshot", help="显式选择本机解释器，采集环境快照 JSON")
+    capture.add_argument("--python", type=Path, required=True, help="目标解释器的绝对路径")
+    capture.add_argument("--environment-id", required=True, help="用户指定的环境标识")
+    capture.add_argument("--package", action="append", default=[], help="查询包元数据，最多 10 个")
+    capture.add_argument("--torch-cuda", action="store_true", help="在隔离进程中导入 PyTorch")
+    capture.add_argument("--gpu", action="store_true", help="运行固定 nvidia-smi 查询")
     collection = commands.add_parser("collect", help="只读登记材料并输出取证状态 JSON")
     collection.add_argument("--root", type=Path, required=True, help="独立材料目录")
     collection.add_argument("--log", required=True, help="根目录内的日志相对路径")
@@ -35,10 +42,44 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument(
         "--snapshot", action="append", default=[], help="环境快照，可重复；第一份为目标环境"
     )
+    collection.add_argument("--query-gpu", action="store_true", help="读取每份快照中的 GPU 结果")
+    collection.add_argument("--path", action="append", default=[], help="登记并检查本机相对路径")
+    collection.add_argument("--path-root", type=Path, help="路径检查的独立授权目录，默认同 --root")
     args = parser.parse_args(argv)
-    if args.command == "collect":
+    if args.command == "snapshot":
         try:
-            state = collect(args.root, args.log, args.code, args.config, args.snapshot)
+            snapshot = capture_environment(
+                args.python,
+                args.environment_id,
+                args.package,
+                torch_cuda=args.torch_cuda,
+                gpu=args.gpu,
+            )
+        except CaptureError as exc:
+            print(f"环境采集失败：{exc}", file=sys.stderr)
+            return 2
+        print(snapshot.model_dump_json(indent=2, exclude_none=True))
+        failed = any(p.status == "error" for p in snapshot.packages) or any(
+            probe is not None and probe.status != "ok"
+            for probe in (snapshot.torch_cuda, snapshot.gpu)
+        )
+        return 1 if failed else 0
+    if args.command == "collect":
+        if args.query_gpu and not args.snapshot:
+            parser.error("--query-gpu 需要至少一份 --snapshot。")
+        if args.path_root and not args.path:
+            parser.error("--path-root 需要至少一个 --path。")
+        try:
+            state = collect(
+                args.root,
+                args.log,
+                args.code,
+                args.config,
+                args.snapshot,
+                paths=args.path,
+                path_root=args.path_root,
+                query_gpu=args.query_gpu,
+            )
         except MaterialError as exc:
             print(f"材料登记失败：{exc}", file=sys.stderr)
             return 2
