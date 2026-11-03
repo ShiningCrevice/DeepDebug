@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 09（文档分工整理）：初始化、数据协议、两个依赖案例及 CLI 只读取证，含材料登记、路径引用检查、日志解析、用户环境快照采集与读取、GPU 降级、15 条本地官方文档摘要的 BM25 检索（保留异常名与 API 后缀）、证据编号和工具记录。第 2 周三项验收已完成；自动诊断尚未实现。
+- 当前完成 Step 10（五类真实故障种子）：初始化、数据协议、六个开发案例（覆盖五类）及 CLI 只读取证，含材料登记、路径引用检查、日志解析、用户环境快照采集与读取、GPU 降级、15 条本地官方文档摘要的 BM25 检索（保留异常名与 API 后缀）、证据编号和工具记录。第 1、2 周各三项验收均已完成；自动诊断尚未实现。
 - 已完成结构精简；模型接口和报告渲染模块随对应功能创建，快照证据保留原始 JSON 值。实现与验证记录见 `docs/progress.md`，各步按主要文件列出改动。
-- 下一步补齐其余四类真实故障种子，完成第 1 周剩余验收项，再推进模型循环。
+- 下一步推进模型接口、单 Agent 控制循环、预算停止和运行轨迹；接入云端模型前完成脱敏预览与材料范围确认。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
@@ -21,14 +21,14 @@
 ## 实现与验证
 
 - 使用 Python 3.10+ 语法、`src/` 布局与 uv；默认开发环境 Python 3.12。
-- 依赖由 `pyproject.toml` 管理并更新 `uv.lock`，按功能需要引入。
+- 依赖由 `pyproject.toml` 管理并更新 `uv.lock`，按功能需要引入。真实故障采集使用可选 `capture` 依赖组（PyTorch 2.9.1、NumPy），默认开发/取证不安装该组。
 - CLI/未来 UI 只负责交互；决策、工具、证据和报告保持清晰边界。
 - 完成修改后执行 `uv run --locked ruff check .`、`uv run --locked ruff format --check .` 和相关 pytest；包配置变动时执行 `uv build`。
 - 控制器测试使用固定模型响应，不依赖付费 API；优先验证协议、权限、预算和证据正确性。
 - 协议见 `docs/tool-api.md`。在持久化、工具调度和报告输出边界重新校验完整状态；直接修改模型中的列表或使用 `model_copy(update=...)` 不保证经过校验。
 - `benchmark/dev/*/materials/` 是输入数据，不用 Ruff 自动改写其中的 Python 案例。两个依赖案例同属 `dependency_interpreter` 案例族，只留在开发集。
-- `scripts/capture_dependency_cases.py` 是开发用固定采集脚本，不是 Agent 工具。参考状态/报告位于 `benchmark/gold/dev/`，均为人工编写，修复未执行。
-- `snapshot` / `scripts/collect_environment.py` 由用户显式选择解释器采集；`--torch-cuda`、`--gpu` 可选。`collect` 只读取环境快照；路径检查来自本机 `collector`，不能当成目标快照环境的文件状态。真实 GPU 成功采集尚未验证。
+- `scripts/capture_dependency_cases.py` 和 `scripts/capture_failure_cases.py` 是开发用固定采集脚本，不是 Agent 工具。后者显式选择解释器和案例，配额 OOM 固定申请 64 MiB，不等同于整卡显存耗尽；缺少环境不生成案例。参考状态/报告位于 `benchmark/gold/dev/`，均为人工编写，修复未执行。
+- `snapshot` / `scripts/collect_environment.py` 由用户显式选择解释器采集；`--torch-cuda`、`--gpu` 可选。`collect` 只读取环境快照；路径检查来自本机 `collector`，不能当成目标快照环境的文件状态。真实 PyTorch/CUDA 可用性已采集；当前 WSL 的 nvidia-smi 不在系统默认搜索路径，自动 GPU 显存摘要仍不可用。
 
 - `collect` 当前是宿主驱动的只读取证，不是模型调度器；不能把工具成功当成诊断或修复成功。材料保持 `redaction_status=pending`，不得未经脱敏与确认接入云端模型。
 - 安全材料读取需要 POSIX `dir_fd/O_NOFOLLOW`；所有链接均拒绝。工具读取登记时固定的内容，保证行号和证据一致。

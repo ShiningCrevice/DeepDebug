@@ -1,0 +1,33 @@
+{
+  "schema_version": "1",
+  "environment": {
+    "mode": "snapshot",
+    "environment_id": "ENV_OOM_001",
+    "interpreter": "/demo/target-env/bin/python",
+    "collected_at": "2026-11-03T12:08:08.481358Z"
+  },
+  "python_version": "3.12.3",
+  "packages": [
+    {
+      "name": "torch",
+      "status": "installed",
+      "version": "2.9.1+cu128",
+      "error": null
+    }
+  ],
+  "torch_cuda": {
+    "status": "ok",
+    "collected_at": "2026-11-03T12:08:08.498179Z",
+    "error": null,
+    "torch_version": "2.9.1+cu128",
+    "cuda_version": "12.8",
+    "cuda_available": true,
+    "device_count": 1
+  },
+  "gpu": {
+    "status": "unavailable",
+    "collected_at": "2026-11-03T12:08:09.576055Z",
+    "error": "系统路径中未找到 nvidia-smi。",
+    "devices": []
+  }
+}

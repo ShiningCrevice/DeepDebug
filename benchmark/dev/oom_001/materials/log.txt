@@ -1,0 +1,8 @@
+interpreter=/demo/target-env/bin/python
+cwd=/demo/work/project/jobs
+device_total_bytes=17074421760 quota_bytes=17074421
+request_bytes=67108864
+Traceback (most recent call last):
+  File "/demo/work/project/jobs/failure_demo.py", line 16, in <module>
+    torch.empty(config["request_bytes"], dtype=torch.uint8, device=config["device"])
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 64.00 MiB. GPU 0 has a total capacity of 15.90 GiB of which 14.80 GiB is free. 16.28 MiB allowed; Of the allocated memory 0 bytes is allocated by PyTorch, and 0 bytes is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

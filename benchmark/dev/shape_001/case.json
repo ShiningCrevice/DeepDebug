@@ -1,0 +1,23 @@
+{
+  "case_id": "shape_001",
+  "family_id": "linear_input_features",
+  "split": "dev",
+  "category": "configuration",
+  "materials": [
+    "materials/log.txt",
+    "materials/failure_demo.py",
+    "materials/config.json",
+    "materials/target_snapshot.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-03T12:08:04.963047+00:00",
+    "synthetic": false,
+    "paths_redacted": true,
+    "capture_method": "scripts/capture_failure_cases.py",
+    "exit_code": 1,
+    "scope": "真实 CPU PyTorch Linear 输入维度失败；仅执行一个小型前向运算。",
+    "python_version": "3.12.3",
+    "pytorch_version": "2.9.1+cu128",
+    "cuda_version": "12.8"
+  }
+}

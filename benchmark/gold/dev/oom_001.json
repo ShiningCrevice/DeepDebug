@@ -1,0 +1,287 @@
+{
+  "schema_version": "1",
+  "session_id": "oom_001",
+  "inputs": [
+    {
+      "artifact_id": "A001",
+      "kind": "log",
+      "display_name": "log.txt",
+      "origin": "fixture",
+      "size_bytes": 846,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A002",
+      "kind": "code",
+      "display_name": "failure_demo.py",
+      "origin": "fixture",
+      "size_bytes": 730,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A003",
+      "kind": "config",
+      "display_name": "config.json",
+      "origin": "fixture",
+      "size_bytes": 82,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A004",
+      "kind": "snapshot",
+      "display_name": "target_snapshot.json",
+      "origin": "fixture",
+      "size_bytes": 776,
+      "redaction_status": "reviewed"
+    }
+  ],
+  "target_environment": {
+    "mode": "snapshot",
+    "environment_id": "ENV_OOM_001",
+    "interpreter": "/demo/target-env/bin/python",
+    "collected_at": "2026-11-03T12:08:08.481358Z"
+  },
+  "error_summary": "固定 64 MiB CUDA 分配超过当前进程设置的显存配额，触发 OOM。",
+  "evidence": [
+    {
+      "evidence_id": "E001",
+      "source": {
+        "kind": "artifact",
+        "id": "A001",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 8
+      },
+      "content": "interpreter=/demo/target-env/bin/python\ncwd=/demo/work/project/jobs\ndevice_total_bytes=17074421760 quota_bytes=17074421\nrequest_bytes=67108864\nTraceback (most recent call last):\n  File \"/demo/work/project/jobs/failure_demo.py\", line 16, in <module>\n    torch.empty(config[\"request_bytes\"], dtype=torch.uint8, device=config[\"device\"])\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 64.00 MiB. GPU 0 has a total capacity of 15.90 GiB of which 14.80 GiB is free. 16.28 MiB allowed; Of the allocated memory 0 bytes is allocated by PyTorch, and 0 bytes is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+      "collected_at": "2026-11-03T12:08:09.577058Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E002",
+      "source": {
+        "kind": "artifact",
+        "id": "A002",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 16
+      },
+      "content": "import json\nimport sys\nfrom pathlib import Path\n\nconfig = json.loads(Path(\"config.json\").read_text(encoding=\"utf-8\"))\nprint(f\"interpreter={sys.executable}\", flush=True)\nprint(f\"cwd={Path.cwd()}\", flush=True)\nimport torch\n\n# A fixed 64 MiB request exceeds a process quota capped at 32 MiB.\ntotal = torch.cuda.get_device_properties(config[\"device\"]).total_memory\nfraction = min(config[\"memory_fraction\"], (32 * 1024 * 1024) / total)\ntorch.cuda.set_per_process_memory_fraction(fraction, config[\"device\"])\nprint(f\"device_total_bytes={total} quota_bytes={int(total * fraction)}\", flush=True)\nprint(f\"request_bytes={config['request_bytes']}\", flush=True)\ntorch.empty(config[\"request_bytes\"], dtype=torch.uint8, device=config[\"device\"])",
+      "collected_at": "2026-11-03T12:08:09.577058Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E003",
+      "source": {
+        "kind": "artifact",
+        "id": "A003",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 5
+      },
+      "content": "{\n  \"device\": \"cuda:0\",\n  \"memory_fraction\": 0.001,\n  \"request_bytes\": 67108864\n}",
+      "collected_at": "2026-11-03T12:08:09.577058Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E004",
+      "source": {
+        "kind": "snapshot",
+        "id": "A004",
+        "environment_id": "ENV_OOM_001",
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "field",
+        "pointer": "/environment"
+      },
+      "content": "{\"mode\": \"snapshot\", \"environment_id\": \"ENV_OOM_001\", \"interpreter\": \"/demo/target-env/bin/python\", \"collected_at\": \"2026-11-03T12:08:08.481358Z\"}",
+      "collected_at": "2026-11-03T12:08:08.481358Z",
+      "truncated": false
+    }
+  ],
+  "hypotheses": [
+    {
+      "hypothesis_id": "H1",
+      "cause": "代码将进程分配器配额限制到总显存的 0.1%（最多 32 MiB），再申请 64 MiB；日志记录配额及申请量。支持进程配额限制，不支持据此认定整卡耗尽、泄漏或碎片化。",
+      "confidence": "有支持但待验证",
+      "supporting_evidence": [
+        "E001",
+        "E002",
+        "E003",
+        "E004"
+      ],
+      "opposing_evidence": [],
+      "pending_checks": [
+        "选择明显低于该配额的申请量，在同一配额设置下验证最小分配。"
+      ]
+    }
+  ],
+  "next_action": null,
+  "tool_history": [],
+  "budget": {
+    "max_decision_calls": 6,
+    "max_tool_calls": 8,
+    "max_report_repairs": 1,
+    "max_tokens": 50000,
+    "reserved_report_tokens": 5000,
+    "max_duration_seconds": 120,
+    "tool_timeout_seconds": 10,
+    "gpu_timeout_seconds": 15,
+    "decision_calls": 0,
+    "tool_calls": 0,
+    "report_repairs": 0,
+    "tokens_used": 0,
+    "elapsed_ms": 0
+  },
+  "stop_reason": "completed",
+  "report": {
+    "schema_version": "1",
+    "session_id": "oom_001",
+    "summary": "固定 64 MiB CUDA 分配超过当前进程设置的显存配额，触发 OOM。",
+    "category": "cuda_oom",
+    "target_environment": {
+      "mode": "snapshot",
+      "environment_id": "ENV_OOM_001",
+      "interpreter": "/demo/target-env/bin/python",
+      "collected_at": "2026-11-03T12:08:08.481358Z"
+    },
+    "evidence": [
+      {
+        "evidence_id": "E001",
+        "source": {
+          "kind": "artifact",
+          "id": "A001",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 8
+        },
+        "content": "interpreter=/demo/target-env/bin/python\ncwd=/demo/work/project/jobs\ndevice_total_bytes=17074421760 quota_bytes=17074421\nrequest_bytes=67108864\nTraceback (most recent call last):\n  File \"/demo/work/project/jobs/failure_demo.py\", line 16, in <module>\n    torch.empty(config[\"request_bytes\"], dtype=torch.uint8, device=config[\"device\"])\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 64.00 MiB. GPU 0 has a total capacity of 15.90 GiB of which 14.80 GiB is free. 16.28 MiB allowed; Of the allocated memory 0 bytes is allocated by PyTorch, and 0 bytes is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+        "collected_at": "2026-11-03T12:08:09.577058Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E002",
+        "source": {
+          "kind": "artifact",
+          "id": "A002",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 16
+        },
+        "content": "import json\nimport sys\nfrom pathlib import Path\n\nconfig = json.loads(Path(\"config.json\").read_text(encoding=\"utf-8\"))\nprint(f\"interpreter={sys.executable}\", flush=True)\nprint(f\"cwd={Path.cwd()}\", flush=True)\nimport torch\n\n# A fixed 64 MiB request exceeds a process quota capped at 32 MiB.\ntotal = torch.cuda.get_device_properties(config[\"device\"]).total_memory\nfraction = min(config[\"memory_fraction\"], (32 * 1024 * 1024) / total)\ntorch.cuda.set_per_process_memory_fraction(fraction, config[\"device\"])\nprint(f\"device_total_bytes={total} quota_bytes={int(total * fraction)}\", flush=True)\nprint(f\"request_bytes={config['request_bytes']}\", flush=True)\ntorch.empty(config[\"request_bytes\"], dtype=torch.uint8, device=config[\"device\"])",
+        "collected_at": "2026-11-03T12:08:09.577058Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E003",
+        "source": {
+          "kind": "artifact",
+          "id": "A003",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 5
+        },
+        "content": "{\n  \"device\": \"cuda:0\",\n  \"memory_fraction\": 0.001,\n  \"request_bytes\": 67108864\n}",
+        "collected_at": "2026-11-03T12:08:09.577058Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E004",
+        "source": {
+          "kind": "snapshot",
+          "id": "A004",
+          "environment_id": "ENV_OOM_001",
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "field",
+          "pointer": "/environment"
+        },
+        "content": "{\"mode\": \"snapshot\", \"environment_id\": \"ENV_OOM_001\", \"interpreter\": \"/demo/target-env/bin/python\", \"collected_at\": \"2026-11-03T12:08:08.481358Z\"}",
+        "collected_at": "2026-11-03T12:08:08.481358Z",
+        "truncated": false
+      }
+    ],
+    "hypotheses": [
+      {
+        "hypothesis_id": "H1",
+        "cause": "代码将进程分配器配额限制到总显存的 0.1%（最多 32 MiB），再申请 64 MiB；日志记录配额及申请量。支持进程配额限制，不支持据此认定整卡耗尽、泄漏或碎片化。",
+        "confidence": "有支持但待验证",
+        "supporting_evidence": [
+          "E001",
+          "E002",
+          "E003",
+          "E004"
+        ],
+        "opposing_evidence": [],
+        "pending_checks": [
+          "选择明显低于该配额的申请量，在同一配额设置下验证最小分配。"
+        ]
+      }
+    ],
+    "fixes": [
+      {
+        "hypothesis_id": "H1",
+        "description": "在同一进程配额下减小申请量；如需调整配额，先人工评估该进程与其他任务的显存需求。",
+        "conditions": "仅适用于本预置案例；/demo 路径为脱敏别名，执行前需映射到实际环境。",
+        "impact": "提高配额允许本进程占用更多显存，可能影响同机任务；快照无法还原失败瞬间全卡占用。",
+        "evidence_ids": [
+          "E001",
+          "E002",
+          "E003",
+          "E004"
+        ],
+        "verification_steps": [
+          "选择明显低于该配额的申请量，在同一配额设置下验证最小分配。"
+        ],
+        "success_criteria": "最小分配成功；不等于训练工作负载可在该配额中完成。"
+      }
+    ],
+    "verifications": [
+      {
+        "check_id": "oom_001_fix",
+        "status": "未执行",
+        "reason": "仅采集失败输入，修复后的检查未运行。",
+        "evidence_ids": [],
+        "execution": null
+      }
+    ],
+    "unresolved_questions": [
+      "修复后检查尚未执行；快照由独立探针进程采集。"
+    ],
+    "tool_history": [],
+    "stop_reason": "completed"
+  }
+}

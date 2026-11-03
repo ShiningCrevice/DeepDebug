@@ -1,0 +1,23 @@
+{
+  "case_id": "device_001",
+  "family_id": "cpu_input_cuda_model",
+  "split": "dev",
+  "category": "device_mismatch",
+  "materials": [
+    "materials/log.txt",
+    "materials/failure_demo.py",
+    "materials/config.json",
+    "materials/target_snapshot.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-03T12:08:07.091645+00:00",
+    "synthetic": false,
+    "paths_redacted": true,
+    "capture_method": "scripts/capture_failure_cases.py",
+    "exit_code": 1,
+    "scope": "真实 CPU 输入与 CUDA Linear 权重设备不一致；仅使用小张量。",
+    "python_version": "3.12.3",
+    "pytorch_version": "2.9.1+cu128",
+    "cuda_version": "12.8"
+  }
+}

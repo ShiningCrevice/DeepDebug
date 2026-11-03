@@ -15,6 +15,15 @@ deepdebug = "deepdebug.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8,<9", "ruff>=0.9,<1"]
+capture = ["torch==2.9.1", "numpy>=2,<3"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/deepdebug"]

@@ -15,6 +15,7 @@ class ProcessResult:
     status: str
     output: bytes = b""
     error: str | None = None
+    exit_code: int | None = None
 
 
 def run_probe(argv: list[str], cwd: Path, timeout: float) -> ProcessResult:
@@ -51,8 +52,8 @@ def run_probe(argv: list[str], cwd: Path, timeout: float) -> ProcessResult:
             except subprocess.TimeoutExpired:
                 return ProcessResult("timeout", error="探针超过执行时限。")
             if code != 0:
-                return ProcessResult("error", error=f"探针退出码为 {code}。")
-            return ProcessResult("ok", bytes(output))
+                return ProcessResult("error", bytes(output), f"探针退出码为 {code}。", code)
+            return ProcessResult("ok", bytes(output), exit_code=code)
         finally:
             if process.poll() is None:
                 process.kill()

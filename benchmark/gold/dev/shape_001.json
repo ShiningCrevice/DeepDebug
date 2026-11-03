@@ -1,0 +1,287 @@
+{
+  "schema_version": "1",
+  "session_id": "shape_001",
+  "inputs": [
+    {
+      "artifact_id": "A001",
+      "kind": "log",
+      "display_name": "log.txt",
+      "origin": "fixture",
+      "size_bytes": 901,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A002",
+      "kind": "code",
+      "display_name": "failure_demo.py",
+      "origin": "fixture",
+      "size_bytes": 473,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A003",
+      "kind": "config",
+      "display_name": "config.json",
+      "origin": "fixture",
+      "size_bytes": 86,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A004",
+      "kind": "snapshot",
+      "display_name": "target_snapshot.json",
+      "origin": "fixture",
+      "size_bytes": 624,
+      "redaction_status": "reviewed"
+    }
+  ],
+  "target_environment": {
+    "mode": "snapshot",
+    "environment_id": "ENV_SHAPE_001",
+    "interpreter": "/demo/target-env/bin/python",
+    "collected_at": "2026-11-03T12:08:03.548403Z"
+  },
+  "error_summary": "CPU Linear 前向运算因输入特征数与层配置不一致而失败。",
+  "evidence": [
+    {
+      "evidence_id": "E001",
+      "source": {
+        "kind": "artifact",
+        "id": "A001",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 16
+      },
+      "content": "interpreter=/demo/target-env/bin/python\ncwd=/demo/work/project/jobs\ninput_shape=(2, 5) weight_shape=(3, 4)\nTraceback (most recent call last):\n  File \"/demo/work/project/jobs/failure_demo.py\", line 13, in <module>\n    model(inputs)\n  File \"/demo/target-env/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1775, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/demo/target-env/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1786, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/demo/target-env/lib/python3.12/site-packages/torch/nn/modules/linear.py\", line 134, in forward\n    return F.linear(input, self.weight, self.bias)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: mat1 and mat2 shapes cannot be multiplied (2x5 and 4x3)",
+      "collected_at": "2026-11-03T12:08:04.963047Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E002",
+      "source": {
+        "kind": "artifact",
+        "id": "A002",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 13
+      },
+      "content": "import json\nimport sys\nfrom pathlib import Path\n\nconfig = json.loads(Path(\"config.json\").read_text(encoding=\"utf-8\"))\nprint(f\"interpreter={sys.executable}\", flush=True)\nprint(f\"cwd={Path.cwd()}\", flush=True)\nimport torch\n\nmodel = torch.nn.Linear(config[\"in_features\"], config[\"out_features\"])\ninputs = torch.zeros(config[\"batch_size\"], config[\"input_features\"])\nprint(f\"input_shape={tuple(inputs.shape)} weight_shape={tuple(model.weight.shape)}\", flush=True)\nmodel(inputs)",
+      "collected_at": "2026-11-03T12:08:04.963047Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E003",
+      "source": {
+        "kind": "artifact",
+        "id": "A003",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 6
+      },
+      "content": "{\n  \"batch_size\": 2,\n  \"input_features\": 5,\n  \"in_features\": 4,\n  \"out_features\": 3\n}",
+      "collected_at": "2026-11-03T12:08:04.963047Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E004",
+      "source": {
+        "kind": "snapshot",
+        "id": "A004",
+        "environment_id": "ENV_SHAPE_001",
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "field",
+        "pointer": "/environment"
+      },
+      "content": "{\"mode\": \"snapshot\", \"environment_id\": \"ENV_SHAPE_001\", \"interpreter\": \"/demo/target-env/bin/python\", \"collected_at\": \"2026-11-03T12:08:03.548403Z\"}",
+      "collected_at": "2026-11-03T12:08:03.548403Z",
+      "truncated": false
+    }
+  ],
+  "hypotheses": [
+    {
+      "hypothesis_id": "H1",
+      "cause": "输入末维为 5，Linear 配置 in_features=4；日志形状及代码、配置支持矩阵乘法内维不匹配。",
+      "confidence": "有支持但待验证",
+      "supporting_evidence": [
+        "E001",
+        "E002",
+        "E003",
+        "E004"
+      ],
+      "opposing_evidence": [],
+      "pending_checks": [
+        "人工确认输入特征语义后，用一致维度的小型前向运算检查输出形状。"
+      ]
+    }
+  ],
+  "next_action": null,
+  "tool_history": [],
+  "budget": {
+    "max_decision_calls": 6,
+    "max_tool_calls": 8,
+    "max_report_repairs": 1,
+    "max_tokens": 50000,
+    "reserved_report_tokens": 5000,
+    "max_duration_seconds": 120,
+    "tool_timeout_seconds": 10,
+    "gpu_timeout_seconds": 15,
+    "decision_calls": 0,
+    "tool_calls": 0,
+    "report_repairs": 0,
+    "tokens_used": 0,
+    "elapsed_ms": 0
+  },
+  "stop_reason": "completed",
+  "report": {
+    "schema_version": "1",
+    "session_id": "shape_001",
+    "summary": "CPU Linear 前向运算因输入特征数与层配置不一致而失败。",
+    "category": "configuration",
+    "target_environment": {
+      "mode": "snapshot",
+      "environment_id": "ENV_SHAPE_001",
+      "interpreter": "/demo/target-env/bin/python",
+      "collected_at": "2026-11-03T12:08:03.548403Z"
+    },
+    "evidence": [
+      {
+        "evidence_id": "E001",
+        "source": {
+          "kind": "artifact",
+          "id": "A001",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 16
+        },
+        "content": "interpreter=/demo/target-env/bin/python\ncwd=/demo/work/project/jobs\ninput_shape=(2, 5) weight_shape=(3, 4)\nTraceback (most recent call last):\n  File \"/demo/work/project/jobs/failure_demo.py\", line 13, in <module>\n    model(inputs)\n  File \"/demo/target-env/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1775, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/demo/target-env/lib/python3.12/site-packages/torch/nn/modules/module.py\", line 1786, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/demo/target-env/lib/python3.12/site-packages/torch/nn/modules/linear.py\", line 134, in forward\n    return F.linear(input, self.weight, self.bias)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: mat1 and mat2 shapes cannot be multiplied (2x5 and 4x3)",
+        "collected_at": "2026-11-03T12:08:04.963047Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E002",
+        "source": {
+          "kind": "artifact",
+          "id": "A002",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 13
+        },
+        "content": "import json\nimport sys\nfrom pathlib import Path\n\nconfig = json.loads(Path(\"config.json\").read_text(encoding=\"utf-8\"))\nprint(f\"interpreter={sys.executable}\", flush=True)\nprint(f\"cwd={Path.cwd()}\", flush=True)\nimport torch\n\nmodel = torch.nn.Linear(config[\"in_features\"], config[\"out_features\"])\ninputs = torch.zeros(config[\"batch_size\"], config[\"input_features\"])\nprint(f\"input_shape={tuple(inputs.shape)} weight_shape={tuple(model.weight.shape)}\", flush=True)\nmodel(inputs)",
+        "collected_at": "2026-11-03T12:08:04.963047Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E003",
+        "source": {
+          "kind": "artifact",
+          "id": "A003",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 6
+        },
+        "content": "{\n  \"batch_size\": 2,\n  \"input_features\": 5,\n  \"in_features\": 4,\n  \"out_features\": 3\n}",
+        "collected_at": "2026-11-03T12:08:04.963047Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E004",
+        "source": {
+          "kind": "snapshot",
+          "id": "A004",
+          "environment_id": "ENV_SHAPE_001",
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "field",
+          "pointer": "/environment"
+        },
+        "content": "{\"mode\": \"snapshot\", \"environment_id\": \"ENV_SHAPE_001\", \"interpreter\": \"/demo/target-env/bin/python\", \"collected_at\": \"2026-11-03T12:08:03.548403Z\"}",
+        "collected_at": "2026-11-03T12:08:03.548403Z",
+        "truncated": false
+      }
+    ],
+    "hypotheses": [
+      {
+        "hypothesis_id": "H1",
+        "cause": "输入末维为 5，Linear 配置 in_features=4；日志形状及代码、配置支持矩阵乘法内维不匹配。",
+        "confidence": "有支持但待验证",
+        "supporting_evidence": [
+          "E001",
+          "E002",
+          "E003",
+          "E004"
+        ],
+        "opposing_evidence": [],
+        "pending_checks": [
+          "人工确认输入特征语义后，用一致维度的小型前向运算检查输出形状。"
+        ]
+      }
+    ],
+    "fixes": [
+      {
+        "hypothesis_id": "H1",
+        "description": "根据真实特征定义，将 Linear 的 in_features 与输入末维统一。",
+        "conditions": "仅适用于本预置案例；/demo 路径为脱敏别名，执行前需映射到实际环境。",
+        "impact": "修改层维度会改变权重形状，已有权重可能不再兼容。",
+        "evidence_ids": [
+          "E001",
+          "E002",
+          "E003",
+          "E004"
+        ],
+        "verification_steps": [
+          "人工确认输入特征语义后，用一致维度的小型前向运算检查输出形状。"
+        ],
+        "success_criteria": "前向运算成功，输出形状为 (batch_size, out_features)。"
+      }
+    ],
+    "verifications": [
+      {
+        "check_id": "shape_001_fix",
+        "status": "未执行",
+        "reason": "仅采集失败输入，修复后的检查未运行。",
+        "evidence_ids": [],
+        "execution": null
+      }
+    ],
+    "unresolved_questions": [
+      "修复后检查尚未执行；快照由独立探针进程采集。"
+    ],
+    "tool_history": [],
+    "stop_reason": "completed"
+  }
+}

@@ -2,7 +2,7 @@
 
 面向 PyTorch 训练与推理故障的诊断助手。目标是根据日志、代码、配置和环境快照，按需补充证据，输出可追溯的候选根因、修复建议和验证方法。
 
-**当前状态：已完成 Step 09（文档分工整理），可采集环境快照、检查登记路径、通过 BM25 检索本地官方文档摘要并通过 CLI 只读取证，尚不支持自动诊断。** 包含材料边界、日志解析、Python/包元数据与可选 PyTorch/CUDA、GPU 采集、15 条文档语料、证据编号和工具记录。
+**当前状态：已完成 Step 10（五类真实故障种子），可采集环境快照、检查登记路径、通过 BM25 检索本地官方文档摘要并通过 CLI 只读取证，尚不支持自动诊断。** 包含材料边界、日志解析、Python/包元数据与可选 PyTorch/CUDA、GPU 采集、15 条文档语料、证据编号和工具记录。
 
 ## 文档导航
 
@@ -103,13 +103,15 @@ Python 探针使用 `-I` 和项目目录外的临时工作目录；元数据探�
 
 `snapshot` 退出码：`0` 表示请求的采集均成功（包的 `not_found` 是查询结果）；`1` 表示保留有效 Python 快照，同时有包查询或可选探针失败；`2` 表示参数或 Python 身份采集失败，标准输出无快照。缺少 PyTorch、没有 `nvidia-smi` 或 GPU 列表为空时记录 `unavailable`；超时记录 `timeout`，非零退出及无效输出记录 `error`。导入时 `inspect_environment` 成功表示快照读取成功，各探针状态仍保留在结果中。
 
-每份快照包含环境标识、解释器和带时区采集时间，GPU 与 PyTorch 探针另有采样时间。这些值描述采集时刻，不能还原失败训练进程的历史显存。快照包含本机路径，尚未经自动脱敏，仅供本地检查。当前已实跑无 PyTorch、无 `nvidia-smi` 的降级；真实 GPU 成功采集未验证。
+每份快照包含环境标识、解释器和带时区采集时间，GPU 与 PyTorch 探针另有采样时间。这些值描述采集时刻，不能还原失败训练进程的历史显存。快照包含本机路径，尚未经自动脱敏，仅供本地检查。已实跑无 PyTorch 降级及真实 CUDA 可用性采集。当前 WSL 主机的 `nvidia-smi` 位于系统默认搜索路径之外，自动 GPU 显存摘要仍返回 `unavailable`；快照中的 `torch_cuda` 可独立返回成功。
 
 ## 数据协议与开发案例
 
 `deepdebug schema <kind>` 输出 JSON Schema，`kind` 可选 `action`、`state`、`report`、`snapshot`。接口字段及约束见 [协议说明](docs/tool-api.md)。
 
-两个开发案例位于 `benchmark/dev/dep_001` 与 `dep_002`。它们具有相同的 `ModuleNotFoundError` 日志，分别通过环境快照和启动配置体现“目标环境缺包”与“使用了错误解释器”。日志和快照来自实际 Python 进程，未执行 PyTorch 训练；所有 `/demo/` 路径均为脱敏别名，不能直接执行。案例分属同一案例族，均留在开发集。
+依赖案例位于 `benchmark/dev/dep_001` 与 `dep_002`。它们具有相同的 `ModuleNotFoundError` 日志，分别通过环境快照和启动配置体现“目标环境缺包”与“使用了错误解释器”。日志和快照来自实际 Python 进程，未执行 PyTorch 训练；所有 `/demo/` 路径均为脱敏别名，不能直接执行。案例分属同一案例族，均留在开发集。
+
+新增 `benchmark/dev/path_001`：真实相对路径读取失败，包含工作目录、配置引用、故障环境中的文件布局和快照。另有 `shape_001` 的 CPU Linear 维度不匹配、`device_001` 的 CPU 输入/CUDA 权重冲突，以及 `oom_001` 的 CUDA 分配器配额 OOM。当前共 6 个真实开发案例，覆盖五类故障；GPU 案例已在 PyTorch 2.9.1+cu128 / RTX 5060 Ti 上采集。OOM 固定申请 64 MiB，超过约 16.28 MiB 的进程配额，不代表整卡显存耗尽。
 
 [人工参考报告与说明](benchmark/gold/dev/README.md) 仅供开发与评测，修复验证均为“未执行”，不能作为 Agent 可读取的材料。材料目录只存放输入。
 
@@ -120,6 +122,10 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 ```
 
 脚本创建临时空虚拟环境、运行固定依赖导入程序，并查询当前项目环境的 pydantic 元数据；不安装包。现有输出目录会被拒绝。新采集的时间、版本可能变化，不会自动更新仓库中的参考答案。
+
+项目采集环境可执行 `uv sync --locked --group capture`，安装锁定的 PyTorch 2.9.1 与 NumPy（Linux/Windows 的 torch 使用 CUDA 12.8 wheel）；默认安装不包含此组。
+
+其余故障的固定采集入口见 [采集脚本说明](scripts/README.md#其余故障种子采集)。`path_001` 只需 Python；`shape_001` 需要 PyTorch，`device_001/oom_001` 还需要 CUDA。显式指定 `--python` 和 `--case`，缺少环境时记录 `unavailable`。OOM 案例采用进程分配器配额，固定申请 64 MiB。
 
 ## 目录与后续实现
 
@@ -134,7 +140,7 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 | `src/deepdebug/collection.py` | 宿主驱动的 CLI 取证流程 |
 | `tests/` | 自动化检查 |
 | `docs/` | 架构决策与逐步进度 |
-| `benchmark/`、`scripts/` | 两个开发案例、人工参考状态、开发案例与用户环境采集脚本 |
+| `benchmark/`、`scripts/` | 六个开发案例、人工参考状态、开发案例与用户环境采集脚本 |
 | `examples/` | 演示材料的预留位置 |
 
 模型接口与报告渲染模块在实现对应功能时创建。Streamlit 和模型 SDK 在对应阶段引入；当前 BM25 检索使用标准库。
@@ -145,4 +151,4 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 
 当前已实现材料与路径边界、大小检查、固定环境探针的超时和输出限制、固定语料检索；尚未实现自动脱敏、模型动作调度、会话预算强制停止或证据语义判断。取证状态中的调用次数和耗时仅作记录。内置验证只针对开发者维护的预置案例，不能等同于真实训练恢复。`runs/`、`sessions/` 已被 Git 忽略，尚无自动保存或清理功能。不得提交真实密钥和私有日志。
 
-下一步：补齐 OOM、设备不一致、路径和配置/形状四类真实故障种子，完成第 1 周剩余验收项，再接入模型决策循环。
+下一步：推进第 3 周模型接口、单 Agent 控制循环、预算停止和运行轨迹；接入云端模型前完成脱敏预览与材料范围确认。

@@ -1,0 +1,10 @@
+{
+  "cwd": "/demo/work/project/jobs",
+  "configured_path": "checkpoints/model.json",
+  "resolved_exists": false,
+  "project_relative_path": "checkpoints/model.json",
+  "project_relative_exists": true,
+  "project_root": "/demo/work/project",
+  "environment_id": "ENV_PATH_001",
+  "collected_at": "2026-11-03T11:58:47.448638+00:00"
+}

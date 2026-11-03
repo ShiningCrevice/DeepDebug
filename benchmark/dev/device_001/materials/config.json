@@ -1,0 +1,6 @@
+{
+  "batch_size": 2,
+  "in_features": 4,
+  "out_features": 3,
+  "device": "cuda:0"
+}

@@ -1,0 +1,23 @@
+{
+  "case_id": "oom_001",
+  "family_id": "cuda_allocator_quota",
+  "split": "dev",
+  "category": "cuda_oom",
+  "materials": [
+    "materials/log.txt",
+    "materials/failure_demo.py",
+    "materials/config.json",
+    "materials/target_snapshot.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-03T12:08:09.577058+00:00",
+    "synthetic": false,
+    "paths_redacted": true,
+    "capture_method": "scripts/capture_failure_cases.py",
+    "exit_code": 1,
+    "scope": "真实 CUDA 分配器配额 OOM；固定申请 64 MiB，进程配额最多 32 MiB。不代表整卡显存耗尽、训练 batch 过大、泄漏或碎片化。",
+    "python_version": "3.12.3",
+    "pytorch_version": "2.9.1+cu128",
+    "cuda_version": "12.8"
+  }
+}

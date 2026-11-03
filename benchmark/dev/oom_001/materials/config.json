@@ -1,0 +1,5 @@
+{
+  "device": "cuda:0",
+  "memory_fraction": 0.001,
+  "request_bytes": 67108864
+}

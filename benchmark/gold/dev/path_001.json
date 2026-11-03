@@ -1,0 +1,334 @@
+{
+  "schema_version": "1",
+  "session_id": "path_001",
+  "inputs": [
+    {
+      "artifact_id": "A001",
+      "kind": "log",
+      "display_name": "log.txt",
+      "origin": "fixture",
+      "size_bytes": 623,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A002",
+      "kind": "code",
+      "display_name": "failure_demo.py",
+      "origin": "fixture",
+      "size_bytes": 353,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A003",
+      "kind": "config",
+      "display_name": "config.json",
+      "origin": "fixture",
+      "size_bytes": 42,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A004",
+      "kind": "snapshot",
+      "display_name": "target_snapshot.json",
+      "origin": "fixture",
+      "size_bytes": 299,
+      "redaction_status": "reviewed"
+    },
+    {
+      "artifact_id": "A005",
+      "kind": "config",
+      "display_name": "layout.json",
+      "origin": "fixture",
+      "size_bytes": 332,
+      "redaction_status": "reviewed"
+    }
+  ],
+  "target_environment": {
+    "mode": "snapshot",
+    "environment_id": "ENV_PATH_001",
+    "interpreter": "/demo/target-env/bin/python",
+    "collected_at": "2026-11-03T11:58:47.409900Z"
+  },
+  "error_summary": "相对路径 checkpoints/model.json 在 project/jobs 工作目录下不存在。",
+  "evidence": [
+    {
+      "evidence_id": "E001",
+      "source": {
+        "kind": "artifact",
+        "id": "A001",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 11
+      },
+      "content": "interpreter=/demo/target-env/bin/python\ncwd=/demo/work/project/jobs\nweights=checkpoints/model.json\nTraceback (most recent call last):\n  File \"/demo/work/project/jobs/failure_demo.py\", line 9, in <module>\n    with Path(config[\"weights\"]).open(encoding=\"utf-8\") as stream:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/demo/python-prefix-1/lib/python3.12/pathlib.py\", line 1015, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'checkpoints/model.json'",
+      "collected_at": "2026-11-03T11:58:47.418327Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E002",
+      "source": {
+        "kind": "artifact",
+        "id": "A002",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 10
+      },
+      "content": "import json\nimport sys\nfrom pathlib import Path\n\nconfig = json.loads(Path(\"config.json\").read_text(encoding=\"utf-8\"))\nprint(f\"interpreter={sys.executable}\", flush=True)\nprint(f\"cwd={Path.cwd()}\", flush=True)\nprint(f\"weights={config['weights']}\", flush=True)\nwith Path(config[\"weights\"]).open(encoding=\"utf-8\") as stream:\n    weights = json.load(stream)",
+      "collected_at": "2026-11-03T11:58:47.418327Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E003",
+      "source": {
+        "kind": "artifact",
+        "id": "A003",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 3
+      },
+      "content": "{\n  \"weights\": \"checkpoints/model.json\"\n}",
+      "collected_at": "2026-11-03T11:58:47.418327Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E004",
+      "source": {
+        "kind": "snapshot",
+        "id": "A004",
+        "environment_id": "ENV_PATH_001",
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "field",
+        "pointer": "/environment"
+      },
+      "content": "{\"mode\": \"snapshot\", \"environment_id\": \"ENV_PATH_001\", \"interpreter\": \"/demo/target-env/bin/python\", \"collected_at\": \"2026-11-03T11:58:47.409900Z\"}",
+      "collected_at": "2026-11-03T11:58:47.409900Z",
+      "truncated": false
+    },
+    {
+      "evidence_id": "E005",
+      "source": {
+        "kind": "artifact",
+        "id": "A005",
+        "environment_id": null,
+        "url": null,
+        "applicable_version": null
+      },
+      "location": {
+        "kind": "lines",
+        "start": 1,
+        "end": 10
+      },
+      "content": "{\n  \"cwd\": \"/demo/work/project/jobs\",\n  \"configured_path\": \"checkpoints/model.json\",\n  \"resolved_exists\": false,\n  \"project_relative_path\": \"checkpoints/model.json\",\n  \"project_relative_exists\": true,\n  \"project_root\": \"/demo/work/project\",\n  \"environment_id\": \"ENV_PATH_001\",\n  \"collected_at\": \"2026-11-03T11:58:47.448638+00:00\"\n}",
+      "collected_at": "2026-11-03T11:58:47.418327Z",
+      "truncated": false
+    }
+  ],
+  "hypotheses": [
+    {
+      "hypothesis_id": "H1",
+      "cause": "日志工作目录为 project/jobs；配置按该目录解析 checkpoints/model.json。采集布局显示同一路径在 project 根目录下存在，支持工作目录与配置相对路径基准不一致。",
+      "confidence": "有支持但待验证",
+      "supporting_evidence": [
+        "E001",
+        "E002",
+        "E003",
+        "E004",
+        "E005"
+      ],
+      "opposing_evidence": [],
+      "pending_checks": [
+        "在明确的工作目录下读取配置指定文件，确认内容与预期一致。"
+      ]
+    }
+  ],
+  "next_action": null,
+  "tool_history": [],
+  "budget": {
+    "max_decision_calls": 6,
+    "max_tool_calls": 8,
+    "max_report_repairs": 1,
+    "max_tokens": 50000,
+    "reserved_report_tokens": 5000,
+    "max_duration_seconds": 120,
+    "tool_timeout_seconds": 10,
+    "gpu_timeout_seconds": 15,
+    "decision_calls": 0,
+    "tool_calls": 0,
+    "report_repairs": 0,
+    "tokens_used": 0,
+    "elapsed_ms": 0
+  },
+  "stop_reason": "completed",
+  "report": {
+    "schema_version": "1",
+    "session_id": "path_001",
+    "summary": "相对路径 checkpoints/model.json 在 project/jobs 工作目录下不存在。",
+    "category": "path",
+    "target_environment": {
+      "mode": "snapshot",
+      "environment_id": "ENV_PATH_001",
+      "interpreter": "/demo/target-env/bin/python",
+      "collected_at": "2026-11-03T11:58:47.409900Z"
+    },
+    "evidence": [
+      {
+        "evidence_id": "E001",
+        "source": {
+          "kind": "artifact",
+          "id": "A001",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 11
+        },
+        "content": "interpreter=/demo/target-env/bin/python\ncwd=/demo/work/project/jobs\nweights=checkpoints/model.json\nTraceback (most recent call last):\n  File \"/demo/work/project/jobs/failure_demo.py\", line 9, in <module>\n    with Path(config[\"weights\"]).open(encoding=\"utf-8\") as stream:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/demo/python-prefix-1/lib/python3.12/pathlib.py\", line 1015, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'checkpoints/model.json'",
+        "collected_at": "2026-11-03T11:58:47.418327Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E002",
+        "source": {
+          "kind": "artifact",
+          "id": "A002",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 10
+        },
+        "content": "import json\nimport sys\nfrom pathlib import Path\n\nconfig = json.loads(Path(\"config.json\").read_text(encoding=\"utf-8\"))\nprint(f\"interpreter={sys.executable}\", flush=True)\nprint(f\"cwd={Path.cwd()}\", flush=True)\nprint(f\"weights={config['weights']}\", flush=True)\nwith Path(config[\"weights\"]).open(encoding=\"utf-8\") as stream:\n    weights = json.load(stream)",
+        "collected_at": "2026-11-03T11:58:47.418327Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E003",
+        "source": {
+          "kind": "artifact",
+          "id": "A003",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 3
+        },
+        "content": "{\n  \"weights\": \"checkpoints/model.json\"\n}",
+        "collected_at": "2026-11-03T11:58:47.418327Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E004",
+        "source": {
+          "kind": "snapshot",
+          "id": "A004",
+          "environment_id": "ENV_PATH_001",
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "field",
+          "pointer": "/environment"
+        },
+        "content": "{\"mode\": \"snapshot\", \"environment_id\": \"ENV_PATH_001\", \"interpreter\": \"/demo/target-env/bin/python\", \"collected_at\": \"2026-11-03T11:58:47.409900Z\"}",
+        "collected_at": "2026-11-03T11:58:47.409900Z",
+        "truncated": false
+      },
+      {
+        "evidence_id": "E005",
+        "source": {
+          "kind": "artifact",
+          "id": "A005",
+          "environment_id": null,
+          "url": null,
+          "applicable_version": null
+        },
+        "location": {
+          "kind": "lines",
+          "start": 1,
+          "end": 10
+        },
+        "content": "{\n  \"cwd\": \"/demo/work/project/jobs\",\n  \"configured_path\": \"checkpoints/model.json\",\n  \"resolved_exists\": false,\n  \"project_relative_path\": \"checkpoints/model.json\",\n  \"project_relative_exists\": true,\n  \"project_root\": \"/demo/work/project\",\n  \"environment_id\": \"ENV_PATH_001\",\n  \"collected_at\": \"2026-11-03T11:58:47.448638+00:00\"\n}",
+        "collected_at": "2026-11-03T11:58:47.418327Z",
+        "truncated": false
+      }
+    ],
+    "hypotheses": [
+      {
+        "hypothesis_id": "H1",
+        "cause": "日志工作目录为 project/jobs；配置按该目录解析 checkpoints/model.json。采集布局显示同一路径在 project 根目录下存在，支持工作目录与配置相对路径基准不一致。",
+        "confidence": "有支持但待验证",
+        "supporting_evidence": [
+          "E001",
+          "E002",
+          "E003",
+          "E004",
+          "E005"
+        ],
+        "opposing_evidence": [],
+        "pending_checks": [
+          "在明确的工作目录下读取配置指定文件，确认内容与预期一致。"
+        ]
+      }
+    ],
+    "fixes": [
+      {
+        "hypothesis_id": "H1",
+        "description": "人工将启动工作目录设为 project，或将配置路径改为相对 jobs 的 ../checkpoints/model.json。",
+        "conditions": "仅适用于本预置案例；/demo 路径为脱敏别名，执行前需映射到实际环境。",
+        "impact": "改变工作目录会改变其他相对路径的解析；须一并检查其他配置引用。",
+        "evidence_ids": [
+          "E001",
+          "E002",
+          "E003",
+          "E004",
+          "E005"
+        ],
+        "verification_steps": [
+          "在明确的工作目录下读取配置指定文件，确认内容与预期一致。"
+        ],
+        "success_criteria": "文件打开成功并读到预期 JSON；不等于模型加载或训练成功。"
+      }
+    ],
+    "verifications": [
+      {
+        "check_id": "path_001_fix",
+        "status": "未执行",
+        "reason": "仅采集失败输入，修复后的检查未运行。",
+        "evidence_ids": [],
+        "execution": null
+      }
+    ],
+    "unresolved_questions": [
+      "修复后检查尚未执行；快照由独立探针进程采集。"
+    ],
+    "tool_history": [],
+    "stop_reason": "completed"
+  }
+}

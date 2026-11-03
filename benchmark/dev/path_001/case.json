@@ -1,0 +1,24 @@
+{
+  "case_id": "path_001",
+  "family_id": "relative_working_directory",
+  "split": "dev",
+  "category": "path",
+  "materials": [
+    "materials/log.txt",
+    "materials/failure_demo.py",
+    "materials/config.json",
+    "materials/target_snapshot.json",
+    "materials/layout.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-03T11:58:47.418327+00:00",
+    "synthetic": false,
+    "paths_redacted": true,
+    "capture_method": "scripts/capture_failure_cases.py",
+    "exit_code": 1,
+    "scope": "真实 Python 相对路径读取失败；工作目录为 project/jobs，文件由采集器创建于 project/checkpoints/model.json；未加载模型或执行训练。",
+    "python_version": "3.12.3",
+    "pytorch_version": null,
+    "cuda_version": null
+  }
+}

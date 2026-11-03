@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "environment": {
+    "mode": "snapshot",
+    "environment_id": "ENV_PATH_001",
+    "interpreter": "/demo/target-env/bin/python",
+    "collected_at": "2026-11-03T11:58:47.409900Z"
+  },
+  "python_version": "3.12.3",
+  "packages": [],
+  "torch_cuda": null,
+  "gpu": null
+}

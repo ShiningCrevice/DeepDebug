@@ -1,0 +1,11 @@
+interpreter=/demo/target-env/bin/python
+cwd=/demo/work/project/jobs
+weights=checkpoints/model.json
+Traceback (most recent call last):
+  File "/demo/work/project/jobs/failure_demo.py", line 9, in <module>
+    with Path(config["weights"]).open(encoding="utf-8") as stream:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/demo/python-prefix-1/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'checkpoints/model.json'
