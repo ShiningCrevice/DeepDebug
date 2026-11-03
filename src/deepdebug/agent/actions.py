@@ -42,7 +42,7 @@ class QueryGpuArguments(Contract):
 
 
 class SearchDocsArguments(Contract):
-    query: Annotated[str, Field(min_length=1, max_length=500)]
+    query: Annotated[Text, Field(max_length=500)]
     category: Category | None = None
     max_results: Annotated[int, Field(strict=True, ge=1, le=3)] = 3
 

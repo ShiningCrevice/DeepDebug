@@ -2,7 +2,18 @@
 
 面向 PyTorch 训练与推理故障的诊断助手。目标是根据日志、代码、配置和环境快照，按需补充证据，输出可追溯的候选根因、修复建议和验证方法。
 
-**当前状态：已完成 Step 06，可采集环境快照、检查登记路径并通过 CLI 只读取证，尚不支持自动诊断。** 包含材料边界、日志解析、Python/包元数据与可选 PyTorch/CUDA、GPU 采集、证据编号和工具记录。目标范围见 [项目规划](DeepDebug_planning.md)，各步改动文件与验证结果见 [开发进度](docs/progress.md)。
+**当前状态：已完成 Step 09（文档分工整理），可采集环境快照、检查登记路径、通过 BM25 检索本地官方文档摘要并通过 CLI 只读取证，尚不支持自动诊断。** 包含材料边界、日志解析、Python/包元数据与可选 PyTorch/CUDA、GPU 采集、15 条文档语料、证据编号和工具记录。
+
+## 文档导航
+
+| 文档 | 职责 |
+|---|---|
+| [项目规划](DeepDebug_planning.md) | 产品范围、里程碑与验收目标 |
+| 本 README | 环境准备、使用入口和当前能力概览 |
+| [架构设计](docs/design.md) | 按模块说明当前架构与设计理由 |
+| [工具协议](docs/tool-api.md) | 按协议和工具说明当前参数、返回值及约束 |
+| [开发进度](docs/progress.md) | 按 Step 保留改动历史、实际验证、验收进展及下一步 |
+| [语料说明](knowledge/README.md) | 当前文档来源清单、评分公式和分词规则 |
 
 ## 环境与启动
 
@@ -27,7 +38,7 @@ uv run --locked pytest
 uv build
 ```
 
-测试覆盖 CLI、协议非法输入、报告引用与验证状态、证据原始位置、路径边界、探针隔离与超时/输出限制、无 GPU 降级。诊断效果待模型循环接入后评测。
+测试覆盖 CLI、协议非法输入、报告引用与验证状态、证据原始位置、路径边界、探针隔离与超时/输出限制、无 GPU 降级、文档检索相关性与语料隔离。诊断效果待模型循环接入后评测。
 
 ## 本地取证
 
@@ -52,6 +63,25 @@ uv run --locked deepdebug collect \
 追加 `--path data/model.pt --path datasets` 可检查显式登记的路径，最多 10 个；默认基准目录为 `--root`，也可通过 `--path-root /absolute/data-directory` 授权另一个独立目录。结果包含 `P001…` 引用 ID、相对路径、授权基准目录、存在性和文件/目录类型，不读取内容或列出邻近文件。不存在的路径是成功查询得到的 `exists=false`；越界、链接等返回 `denied`。路径证据标记为 `local/collector`，只反映运行命令这台机器的采集时刻，不能代替远端故障环境的文件状态。
 
 安全读取依赖 POSIX 的目录文件描述符与 `O_NOFOLLOW`，当前实际验证平台为 Linux；Windows 上会明确拒绝取证操作，Schema 导出仍可使用。所有符号链接（包括指向目录内部的链接）、硬链接、隐藏路径、目录穿越和 `benchmark/gold` 访问均拒绝，不能把整个仓库设为材料根目录。这些检查约束本地文件读取，不提供通用进程隔离。
+
+## 本地文档检索
+
+```bash
+uv run --locked deepdebug search-docs '错误解释器' --category dependency --max-results 2
+uv run --locked deepdebug search-docs 'mat1 and mat2 shapes cannot be multiplied'
+```
+
+输出含工具记录与文档证据的 `DiagnosisState` JSON。每条结果包含 `D001…` 文档编号、官方来源 URL、适用版本、整理时间、中文摘要和排序分数；对应 `E001…` 证据指向该文档的 `/excerpt`。文档证据时间是整理时间，工具结果时间是本次检索时间。
+
+15 条语料覆盖五类故障，来源与维护说明见 [文档清单](knowledge/README.md)。查询长度为 1～500 字符，BM25 排序每次最多返回 3 条，支持 `--category cuda_oom/device_mismatch/dependency/path/configuration` 过滤；`unknown/out_of_scope` 当前无语料。无匹配返回 `ok` 和空列表；结果有省略时标记 `truncated=true`，已返回的摘要保持完整。退出码 `0` 表示查询成功，`1` 表示工具失败，`2` 表示 CLI 参数错误。
+
+BM25 根据词的文档频率、出现次数和文档长度评分。标题、关键词、摘要合并为索引文本；保留完整异常名、下划线标识符和点分 API 及其后缀，例如 `torch.nn.Linear` 同时匹配 `nn.Linear`、`Linear`。中文继续使用相邻双字片段，英文忽略大小写。可直接查询完整报错或 API 名称，例如 `search-docs "ModuleNotFoundError: No module named torch"`、`search-docs "torch.nn.Linear"`。
+
+在 `collect` 命令后追加 `--docs-query 'ModuleNotFoundError' --docs-category dependency`，可把文档证据加入同一取证状态，保留目标环境和原始材料证据。检索仅读取随包发布的固定语料，不接受语料路径参数。固定包目录允许位于 `.venv` 等隐藏安装目录下，文件仍拒绝链接；用户材料目录的隐藏路径限制保持有效。
+
+从 wheel 安装时，使用 `uv pip install --link-mode copy dist/deepdebug_agent-0.1.0-py3-none-any.whl`；uv 默认硬链接安装会使语料读取返回 `denied`。仓库内 `uv sync --locked` 的可编辑安装直接读取源码语料。
+
+文档是人工改写的背景资料，版本标注为 PyTorch 2.9 或 Python 3.12；当前不自动判断与目标环境的版本兼容性。排序分数不表示诊断置信度，文档不能单独证明当前实例的根因。检索和取证均在本地执行。
 
 ## 采集用户环境快照
 
@@ -97,21 +127,22 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 |---|---|
 | `src/deepdebug/cli.py` | 命令行参数与入口 |
 | `src/deepdebug/agent/` | 已实现协议、动作校验与状态；控制器待实现 |
-| `src/deepdebug/tools/` | 材料登记、日志解析、环境采集与快照读取、路径引用和取证会话 |
+| `src/deepdebug/tools/` | 材料登记、日志解析、环境采集与快照读取、路径引用、本地文档检索和取证会话 |
+| `src/deepdebug/knowledge/`、`knowledge/` | 随包发布的固定文档语料、来源清单与维护说明 |
 | `src/deepdebug/security/` | 已实现只读路径边界；自动脱敏待实现 |
 | `src/deepdebug/agent/evidence.py` | 会话内稳定证据编号与去重 |
 | `src/deepdebug/collection.py` | 宿主驱动的 CLI 取证流程 |
 | `tests/` | 自动化检查 |
 | `docs/` | 架构决策与逐步进度 |
 | `benchmark/`、`scripts/` | 两个开发案例、人工参考状态、开发案例与用户环境采集脚本 |
-| `examples/`、`knowledge/` | 演示材料与文档语料的预留位置 |
+| `examples/` | 演示材料的预留位置 |
 
-模型接口与报告渲染模块在实现对应功能时创建。Streamlit、模型 SDK 和检索依赖在对应阶段引入。
+模型接口与报告渲染模块在实现对应功能时创建。Streamlit 和模型 SDK 在对应阶段引入；当前 BM25 检索使用标准库。
 
 ## 范围与边界
 
 首版聚焦 OOM、设备不一致、依赖/解释器、路径和配置/形状五类问题。采用单 Agent 状态机，默认导入环境快照；本机采集需要用户明确选择。模型不得执行任意代码或 shell、安装依赖、修改用户文件或重跑真实训练。上传材料和检索文档均是不可信数据。
 
-当前已实现材料与路径边界、大小检查、固定环境探针的超时和输出限制；尚未实现自动脱敏、模型动作调度、会话预算强制停止、文档检索或证据语义判断。取证状态中的调用次数和耗时仅作记录。内置验证只针对开发者维护的预置案例，不能等同于真实训练恢复。`runs/`、`sessions/` 已被 Git 忽略，尚无自动保存或清理功能。不得提交真实密钥和私有日志。
+当前已实现材料与路径边界、大小检查、固定环境探针的超时和输出限制、固定语料检索；尚未实现自动脱敏、模型动作调度、会话预算强制停止或证据语义判断。取证状态中的调用次数和耗时仅作记录。内置验证只针对开发者维护的预置案例，不能等同于真实训练恢复。`runs/`、`sessions/` 已被 Git 忽略，尚无自动保存或清理功能。不得提交真实密钥和私有日志。
 
-下一步：补齐其余四类故障种子与本地文档检索，完成第 1～2 周剩余验收项，再接入模型决策循环。
+下一步：补齐 OOM、设备不一致、路径和配置/形状四类真实故障种子，完成第 1 周剩余验收项，再接入模型决策循环。

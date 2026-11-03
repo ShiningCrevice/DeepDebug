@@ -7,9 +7,15 @@ from datetime import datetime, timezone
 from time import monotonic
 from uuid import uuid4
 
-from deepdebug.agent.actions import CheckPathsArguments, ParseLogArguments, ReadArtifactArguments
+from deepdebug.agent.actions import (
+    CheckPathsArguments,
+    ParseLogArguments,
+    ReadArtifactArguments,
+    SearchDocsArguments,
+)
 from deepdebug.agent.evidence import EvidenceRegistry
 from deepdebug.agent.schemas import (
+    Category,
     FieldLocation,
     LineLocation,
     Source,
@@ -21,6 +27,7 @@ from deepdebug.agent.schemas import (
 from deepdebug.agent.state import DiagnosisState
 from deepdebug.security.paths import MaterialError
 from deepdebug.tools.artifacts import Excerpt, MaterialRegistry, RegisteredMaterial, excerpt
+from deepdebug.tools.docs_search import DocumentIndex
 from deepdebug.tools.environment import load_snapshot
 from deepdebug.tools.log_parser import parse_log
 from deepdebug.tools.path_references import PathReferences
@@ -43,6 +50,7 @@ class CollectionSession:
         self.evidence = EvidenceRegistry()
         self.state = DiagnosisState(session_id=uuid4().hex, inputs=materials.artifacts())
         self._started = monotonic()
+        self._documents: DocumentIndex | None = None
 
     def _run(
         self,
@@ -354,4 +362,50 @@ class CollectionSession:
             operation,
             arguments_summary=f"path_reference_ids={reference_ids}",
             local_source=source,
+        )
+
+    def search_docs(
+        self, query: str, category: Category | None = None, max_results: int = 3
+    ) -> ToolResult:
+        def operation(_item):
+            args = SearchDocsArguments(query=query, category=category, max_results=max_results)
+            if self._documents is None:
+                self._documents = DocumentIndex()
+            matches, total = self._documents.search(args)
+            observations = [
+                dict(
+                    source=Source(
+                        kind="document",
+                        id=hit["document_id"],
+                        url=hit["url"],
+                        applicable_version=hit["applicable_version"],
+                    ),
+                    location=FieldLocation(pointer="/excerpt"),
+                    content=hit["excerpt"],
+                    collected_at=hit["collected_at"],
+                )
+                for hit in matches
+            ]
+            return (
+                {
+                    "query": args.query,
+                    "category": args.category,
+                    "matches": matches,
+                    "total": total,
+                },
+                observations,
+                total > len(matches),
+                None,
+                None,
+            )
+
+        return self._run(
+            "search_docs",
+            None,
+            "检索本地官方文档摘要，提供带版本的背景资料。",
+            operation,
+            arguments_summary=(
+                f"query={query[:500]!r}, category={category}, max_results={max_results}"
+            ),
+            local_source=Source(kind="local", id="docs_index", environment_id="collector"),
         )

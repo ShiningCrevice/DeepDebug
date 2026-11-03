@@ -6,11 +6,12 @@ import sys
 from collections.abc import Sequence
 from importlib.metadata import version
 from pathlib import Path
+from typing import get_args
 
 from deepdebug.agent.actions import ACTION_ADAPTER
-from deepdebug.agent.schemas import DiagnosisReport, EnvironmentSnapshot
+from deepdebug.agent.schemas import Category, DiagnosisReport, EnvironmentSnapshot
 from deepdebug.agent.state import DiagnosisState
-from deepdebug.collection import collect
+from deepdebug.collection import collect, search_documents
 from deepdebug.security.paths import MaterialError
 from deepdebug.tools.capture import CaptureError, capture_environment
 
@@ -28,6 +29,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command")
     schema = commands.add_parser("schema", help="输出数据协议的 JSON Schema")
     schema.add_argument("kind", choices=["action", "state", "report", "snapshot"])
+    search = commands.add_parser("search-docs", help="检索本地官方文档摘要并输出带证据的状态")
+    search.add_argument("query", help="查询词，1～500 字符")
+    search.add_argument("--category", choices=get_args(Category), help="按故障类别过滤")
+    search.add_argument("--max-results", type=int, choices=[1, 2, 3], default=3)
     capture = commands.add_parser("snapshot", help="显式选择本机解释器，采集环境快照 JSON")
     capture.add_argument("--python", type=Path, required=True, help="目标解释器的绝对路径")
     capture.add_argument("--environment-id", required=True, help="用户指定的环境标识")
@@ -45,7 +50,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument("--query-gpu", action="store_true", help="读取每份快照中的 GPU 结果")
     collection.add_argument("--path", action="append", default=[], help="登记并检查本机相对路径")
     collection.add_argument("--path-root", type=Path, help="路径检查的独立授权目录，默认同 --root")
+    collection.add_argument("--docs-query", help="追加一次本地文档检索，最多返回 3 条")
+    collection.add_argument("--docs-category", choices=get_args(Category), help="文档故障类别过滤")
     args = parser.parse_args(argv)
+    if args.command == "search-docs":
+        state = search_documents(args.query, args.category, args.max_results)
+        print(state.model_dump_json(indent=2))
+        return 0 if state.tool_history[0].result.status == "ok" else 1
     if args.command == "snapshot":
         try:
             snapshot = capture_environment(
@@ -69,6 +80,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--query-gpu 需要至少一份 --snapshot。")
         if args.path_root and not args.path:
             parser.error("--path-root 需要至少一个 --path。")
+        if args.docs_category and args.docs_query is None:
+            parser.error("--docs-category 需要 --docs-query。")
         try:
             state = collect(
                 args.root,
@@ -79,6 +92,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 paths=args.path,
                 path_root=args.path_root,
                 query_gpu=args.query_gpu,
+                docs_query=args.docs_query,
+                docs_category=args.docs_category,
             )
         except MaterialError as exc:
             print(f"材料登记失败：{exc}", file=sys.stderr)

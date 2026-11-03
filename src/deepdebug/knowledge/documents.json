@@ -1,0 +1,279 @@
+{
+  "schema_version": "1",
+  "documents": [
+    {
+      "document_id": "D001",
+      "title": "CUDA 缓存分配器与显存统计",
+      "category": "cuda_oom",
+      "url": "https://docs.pytorch.org/docs/2.9/notes/cuda.html#memory-management",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "CUDA",
+        "OOM",
+        "out of memory",
+        "显存不足",
+        "memory_reserved",
+        "缓存分配器"
+      ],
+      "excerpt": "PyTorch 使用缓存分配器。memory_allocated 统计张量占用，memory_reserved 统计分配器管理的显存；未使用的缓存仍可显示在 nvidia-smi 中。empty_cache 释放未使用缓存，不释放仍被张量占用的显存。"
+    },
+    {
+      "document_id": "D002",
+      "title": "memory_allocated 当前张量显存",
+      "category": "cuda_oom",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.cuda.memory.memory_allocated.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "memory_allocated",
+        "显存",
+        "字节",
+        "nvidia-smi",
+        "GPU"
+      ],
+      "excerpt": "torch.cuda.memory_allocated(device) 返回指定设备上当前张量占用的 GPU 显存字节数。未指定设备时使用当前设备。缓存与 CUDA 上下文会使 nvidia-smi 显示值高于该统计。"
+    },
+    {
+      "document_id": "D003",
+      "title": "empty_cache 的释放范围",
+      "category": "cuda_oom",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.cuda.memory.empty_cache.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "empty_cache",
+        "OOM",
+        "out of memory",
+        "显存不足",
+        "碎片化",
+        "缓存"
+      ],
+      "excerpt": "empty_cache 将分配器中未占用的缓存释放给其他 GPU 应用使用。它不会增加 PyTorch 可使用的显存容量；在部分情况下有助于减少碎片化。"
+    },
+    {
+      "document_id": "D004",
+      "title": "Tensor.to 返回设备或类型转换后的张量",
+      "category": "device_mismatch",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.Tensor.to.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "Tensor.to",
+        "device mismatch",
+        "same device",
+        "设备不一致",
+        "cpu",
+        "cuda",
+        "dtype"
+      ],
+      "excerpt": "Tensor.to 返回指定设备或 dtype 的张量。设备和类型均已匹配时可以返回原张量，否则返回转换后的副本。使用转换结果需要接收返回值；to(other) 可匹配另一个张量的设备和类型。"
+    },
+    {
+      "document_id": "D005",
+      "title": "Module.to 迁移参数与缓冲区",
+      "category": "device_mismatch",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.nn.Module.html#torch.nn.Module.to",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "Module.to",
+        "model.to",
+        "parameters",
+        "buffers",
+        "设备不一致",
+        "模型迁移"
+      ],
+      "excerpt": "Module.to 迁移或转换模块的参数与缓冲区，并原地修改模块。指定 dtype 时仅转换浮点或复数参数和缓冲区；整数参数和缓冲区可迁移设备但保留类型。"
+    },
+    {
+      "document_id": "D006",
+      "title": "torch.tensor 创建时的设备选择",
+      "category": "device_mismatch",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.tensor.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "torch.tensor",
+        "device",
+        "新建张量",
+        "中间张量",
+        "设备不一致",
+        "cpu",
+        "cuda"
+      ],
+      "excerpt": "torch.tensor 可以显式指定 device。device 为 None 且 data 为张量时沿用 data 的设备；data 不是张量时使用当前设备。创建中间张量时可显式传入所需设备。"
+    },
+    {
+      "document_id": "D007",
+      "title": "venv 隔离与解释器选择",
+      "category": "dependency",
+      "url": "https://docs.python.org/3.12/library/venv.html#how-venvs-work",
+      "applicable_version": "Python 3.12",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "venv",
+        "virtualenv",
+        "虚拟环境",
+        "解释器",
+        "缺包",
+        "ModuleNotFoundError"
+      ],
+      "excerpt": "虚拟环境具有独立的包集合。虚拟环境内的 sys.prefix 指向该环境，sys.base_prefix 指向基础 Python；两者不同可用于判断虚拟环境。可直接使用环境中解释器的完整路径运行程序，无须先激活环境。"
+    },
+    {
+      "document_id": "D008",
+      "title": "sys.executable 标识当前解释器",
+      "category": "dependency",
+      "url": "https://docs.python.org/3.12/library/sys.html#sys.executable",
+      "applicable_version": "Python 3.12",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "sys.executable",
+        "解释器不一致",
+        "错误解释器",
+        "interpreter",
+        "Python"
+      ],
+      "excerpt": "sys.executable 在支持的系统上给出当前 Python 解释器可执行文件的绝对路径。无法取得该路径时值可为空字符串或 None。"
+    },
+    {
+      "document_id": "D009",
+      "title": "importlib.metadata 查询分发包",
+      "category": "dependency",
+      "url": "https://docs.python.org/3.12/library/importlib.metadata.html#distribution-versions",
+      "applicable_version": "Python 3.12",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "importlib.metadata",
+        "PackageNotFoundError",
+        "ModuleNotFoundError",
+        "缺包",
+        "包版本",
+        "distribution"
+      ],
+      "excerpt": "importlib.metadata.version 查询当前 Python 环境中的分发包版本；找不到分发包时抛出 PackageNotFoundError。分发包名称与 import 名称并非一一对应，可通过 packages_distributions 查询映射。"
+    },
+    {
+      "document_id": "D010",
+      "title": "pathlib 的存在性与文件类型",
+      "category": "path",
+      "url": "https://docs.python.org/3.12/library/pathlib.html#querying-file-type-and-status",
+      "applicable_version": "Python 3.12",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "pathlib",
+        "exists",
+        "is_file",
+        "is_dir",
+        "FileNotFoundError",
+        "文件不存在",
+        "路径"
+      ],
+      "excerpt": "Path.exists 查询目标文件或目录是否存在，Path.is_file 和 Path.is_dir 区分普通文件与目录。默认查询会跟随符号链接；指向缺失目标的链接可返回不存在。其他权限等错误可以传播为异常。"
+    },
+    {
+      "document_id": "D011",
+      "title": "os.path 相对路径与工作目录",
+      "category": "path",
+      "url": "https://docs.python.org/3.12/library/os.path.html#os.path.abspath",
+      "applicable_version": "Python 3.12",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "os.path",
+        "abspath",
+        "cwd",
+        "相对路径",
+        "工作目录",
+        "FileNotFoundError"
+      ],
+      "excerpt": "os.path.abspath 将路径转换为规范化的绝对路径；多数平台上相当于将当前工作目录与输入路径拼接后规范化。Python 不会自动展开路径中的用户目录符号或环境变量，需要应用显式处理。"
+    },
+    {
+      "document_id": "D012",
+      "title": "torch.load 的文件输入与设备映射",
+      "category": "path",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.load.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "torch.load",
+        "checkpoint",
+        "检查点",
+        "文件路径",
+        "map_location",
+        "FileNotFoundError"
+      ],
+      "excerpt": "torch.load 的 f 参数可为文件名、PathLike 或满足接口的文件对象。张量存储先在 CPU 反序列化，再迁移到保存时的设备；map_location 可指定替代设备。文档要求只加载可信数据。"
+    },
+    {
+      "document_id": "D013",
+      "title": "Linear 的输入特征维度",
+      "category": "configuration",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.nn.Linear.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "Linear",
+        "in_features",
+        "out_features",
+        "mat1",
+        "mat2",
+        "shapes cannot be multiplied",
+        "形状不匹配",
+        "维度"
+      ],
+      "excerpt": "Linear(in_features, out_features) 要求输入的最后一维等于 in_features。输出保留前面的维度，最后一维改为 out_features。权重形状为 (out_features, in_features)。"
+    },
+    {
+      "document_id": "D014",
+      "title": "reshape 的元素数量与推断维度",
+      "category": "configuration",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.reshape.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "reshape",
+        "shape",
+        "invalid shape",
+        "形状不匹配",
+        "元素数量",
+        "维度"
+      ],
+      "excerpt": "torch.reshape 改变形状但保持数据及元素总数。可以将一个维度设为 -1，由其他维度和元素总数推断。返回值可能是视图或副本，不应依赖是否发生拷贝。"
+    },
+    {
+      "document_id": "D015",
+      "title": "CrossEntropyLoss 的标签形状与类型",
+      "category": "configuration",
+      "url": "https://docs.pytorch.org/docs/2.9/generated/torch.nn.CrossEntropyLoss.html",
+      "applicable_version": "PyTorch 2.9",
+      "collected_at": "2026-11-03T12:24:00+08:00",
+      "content_kind": "curated_summary",
+      "keywords": [
+        "CrossEntropyLoss",
+        "target",
+        "long",
+        "dtype",
+        "标签",
+        "类别索引",
+        "形状不匹配"
+      ],
+      "excerpt": "对 (N, C) 输入，类别索引标签形状为 (N)，类型为 long；除 ignore_index 约定外索引应在 [0, C) 内。概率标签应与输入形状一致且为浮点类型，每项在 [0, 1] 内并构成有效概率分布。"
+    }
+  ]
+}

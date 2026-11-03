@@ -11,8 +11,8 @@ class MaterialError(ValueError):
     """Safe-to-display material error; never includes file contents or absolute paths."""
 
 
-def check_parts(parts: tuple[str, ...]) -> None:
-    if ".." in parts or any(p.startswith(".") and p != "." for p in parts):
+def check_parts(parts: tuple[str, ...], *, allow_hidden: bool = False) -> None:
+    if ".." in parts or (not allow_hidden and any(p.startswith(".") and p != "." for p in parts)):
         raise MaterialError("不允许父目录引用或隐藏路径。")
     if any(a == "benchmark" and b == "gold" for a, b in zip(parts, parts[1:], strict=False)):
         raise MaterialError("禁止读取 benchmark/gold 参考答案。")
@@ -38,9 +38,10 @@ def open_directory(path: Path) -> int:
 class AuthorizedRoot:
     """Context-managed root handle; tools never receive filesystem paths."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, allow_hidden_root: bool = False):
         root = root.absolute()
-        check_parts(root.parts)
+        # Only packaged resources opt in: installed packages may live under .venv.
+        check_parts(root.parts, allow_hidden=allow_hidden_root)
         # Refuse this source checkout and its ancestors, even when cwd is elsewhere.
         checkout = Path(__file__).resolve().parents[3]
         if (checkout / "DeepDebug_planning.md").is_file() and (
@@ -67,7 +68,8 @@ class AuthorizedRoot:
         path = Path(relative)
         if path.is_absolute() or not path.parts or "\\" in relative:
             raise MaterialError("材料必须使用根目录内的相对路径。")
-        check_parts((*self._root_parts, *path.parts))
+        check_parts(path.parts)
+        check_parts((*self._root_parts, *path.parts), allow_hidden=True)
         fd = os.dup(self._fd)
         try:
             for part in path.parts[:-1]:
@@ -95,7 +97,8 @@ class AuthorizedRoot:
         path = Path(relative)
         if path.is_absolute() or not path.parts or "\\" in relative or "\x00" in relative:
             raise MaterialError("路径引用必须是授权根目录内的相对路径。")
-        check_parts((*self._root_parts, *path.parts))
+        check_parts(path.parts)
+        check_parts((*self._root_parts, *path.parts), allow_hidden=True)
         fd = os.dup(self._fd)
         try:
             for part in path.parts[:-1]:

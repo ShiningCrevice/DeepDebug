@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from deepdebug.agent.schemas import Category
 from deepdebug.agent.state import DiagnosisState
 from deepdebug.security.paths import AuthorizedRoot
 from deepdebug.tools.artifacts import MaterialRegistry
@@ -19,6 +20,8 @@ def collect(
     paths: list[str] | None = None,
     path_root: Path | None = None,
     query_gpu: bool = False,
+    docs_query: str | None = None,
+    docs_category: Category | None = None,
 ) -> DiagnosisState:
     registry = MaterialRegistry()
     with AuthorizedRoot(root) as authorized:
@@ -39,4 +42,14 @@ def collect(
             references = PathReferences(authorized)
             reference_ids = [references.register(path) for path in paths]
             session.check_paths(references, reference_ids)
+    if docs_query is not None:
+        session.search_docs(docs_query, docs_category)
+    return DiagnosisState.model_validate(session.state)
+
+
+def search_documents(
+    query: str, category: Category | None = None, max_results: int = 3
+) -> DiagnosisState:
+    session = CollectionSession(MaterialRegistry())
+    session.search_docs(query, category, max_results)
     return DiagnosisState.model_validate(session.state)

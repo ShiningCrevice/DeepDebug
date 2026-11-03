@@ -1,6 +1,8 @@
-# 数据协议 v1
+# 数据协议与工具接口 v1
 
-协议实现位于 `src/deepdebug/agent/`，协议自身不执行文件读取、探针或模型调用。使用 `deepdebug schema action/state/report/snapshot` 导出当前 JSON Schema。宿主取证实现见本文最后一节。
+本文按协议和工具说明当前参数、返回值及约束。架构与设计理由见 [架构设计](design.md)，改动历史与验证结果见 [开发进度](progress.md)，CLI 使用示例见 [README](../README.md)。
+
+协议实现位于 `src/deepdebug/agent/`，协议自身不执行文件读取、探针或模型调用。使用 `deepdebug schema action/state/report/snapshot` 导出当前 JSON Schema。宿主接口见下文的材料登记、取证会话、环境采集、路径检查和文档检索章节。
 
 ## 类型与边界
 
@@ -51,17 +53,19 @@
 
 ## 预算与更新
 
-`Budget` 默认 6 次决策、8 次工具、1 次报告修正、50,000 token（含预留 5,000）、120 秒总时限，普通工具 10 秒、GPU 探针 15 秒。当前只校验配置和计数，尚不执行预算扣减和停止；允许记录超过上限的实际用量，以便保留超时/超支事实。
+`Budget` 默认 6 次决策、8 次工具、1 次报告修正、50,000 token（含预留 5,000）、120 秒总时限，普通工具 10 秒、GPU 探针 15 秒。当前记录实际工具调用次数与耗时，并校验预算配置和计数，尚未强制执行会话预算停止；允许记录超过上限的实际用量，以便保留超时/超支事实。
 
 协议对象不是不可变存储。嵌套列表修改、直接赋值或 `model_copy(update=...)` 不自动完成全状态校验；在后续持久化、调度和输出边界调用 `DiagnosisState.model_validate`（对象会重新校验）或 `model_validate_json`。
 
-## Step 03：宿主取证接口
+## 材料登记
 
-`MaterialRegistry.register` 只在用户指定的独立根目录内登记显式相对路径，先校验扩展名、文件类型、2 MiB 实际字节上限与 UTF-8 文本，再分配 `A001…`。`origin=local` 是新增的兼容取值，表示本地材料输入，不代表执行了本机探针。最多 10 份材料，记录保持 `pending` 脱敏状态。内容在登记时固定，后续工具按 ID 读取内存副本。
+`MaterialRegistry.register` 只在用户指定的独立根目录内登记显式相对路径，先校验扩展名、文件类型、2 MiB 实际字节上限与 UTF-8 文本，再分配 `A001…`。`origin=local` 表示本地材料输入，不代表执行了本机探针。最多 10 份材料，记录保持 `pending` 脱敏状态。内容在登记时固定，后续工具按 ID 读取内存副本。
 
 `AuthorizedRoot` 使用 POSIX 目录描述符逐级打开，不跟随符号链接，拒绝硬链接、非普通文件、隐藏路径、`..` 和 `benchmark/gold`。目录描述符可防止已打开根目录被替换为链接后转向其他目录；该边界不覆盖系统级权限攻击。路径检查无法识别用户复制到其他位置的 gold 内容，运行时只应登记授权材料。
 
-`CollectionSession` 当前提供五个宿主方法：
+## 取证会话
+
+`CollectionSession` 当前提供六个宿主方法：
 
 | 方法 | 输出与边界 |
 |---|---|
@@ -70,6 +74,7 @@
 | `inspect_snapshot(artifact_id, as_target=True)` | 以 `inspect_environment` 记录快照模式结果；校验快照及环境 ID 冲突，证据保留采集时间、JSON Pointer 与原始 JSON 值 |
 | `query_gpu(artifact_id)` | 读取已登记快照的 GPU 字段，成功证据指向 `/gpu`；保留采样时间，失败状态进入历史，缺字段返回 `unavailable` |
 | `check_paths(references, reference_ids)` | 查询宿主已登记的最多 10 个路径引用，结果含存在性、文件/目录类型和授权基准目录；观察来源为 `local/collector` |
+| `search_docs(query, category=None, max_results=3)` | 检索固定本地语料，返回文档 ID、URL、版本、整理时间与摘要，登记 `document` 来源证据 |
 
 快照宿主接口显式绑定材料 ID；未来模型调度层需把动作协议的 `environment_id/probe_ids` 映射到授权快照及固定探针，当前不接受模型直接调度。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
 
@@ -79,7 +84,7 @@
 
 取证输出 `DiagnosisState`，假设列表为空，报告与诊断停止原因为 null。调用数与取证会话耗时会记录，预算上限和自动清理尚未执行。固定环境子进程已执行单次超时和输出限制。所有输出只在本地，未经脱敏。
 
-## Step 06：环境采集与路径引用
+## 环境采集与快照查询
 
 `capture_environment(interpreter, environment_id, packages, torch_cuda=False, gpu=False)` 由宿主显式调用，返回可导入的 `EnvironmentSnapshot`。CLI `snapshot` 与 `scripts/collect_environment.py` 共用入口，要求解释器绝对路径和环境标识，包名限制为最多 10 个分发包名称。默认只采集 Python 标识和包元数据；两个可选探针分别通过 `--torch-cuda/--gpu` 启用。
 
@@ -87,6 +92,20 @@
 
 Python 身份采集失败不输出快照；可选探针失败时仍保留 Python 信息与各探针状态。CPU-only PyTorch 可成功返回 `cuda_available=false`；缺少 PyTorch、未找到 GPU 程序或查询列表为空时为 `unavailable`，非零退出或无效输出为 `error`。`inspect_snapshot` 的成功表示读取有效快照，各探针的失败仍作为原始数据保留；`query_gpu` 将 GPU 失败状态写入工具结果，并保留快照来源和采样时间。GPU 查询不改变会话目标环境。
 
+## 路径引用检查
+
 `PathReferences` 由宿主绑定一个 `AuthorizedRoot`，显式登记相对路径后返回 `P001…`。CLI `--path` 登记引用，`--path-root` 指定授权基准目录（默认材料根目录）。检查使用保持打开的目录描述符，只做逐级目录访问与最终节点 stat，拒绝符号链接、硬链接、特殊文件、隐藏路径、越界及 gold；不扫描配置或遍历目录。路径缺失返回成功结果中的 `exists=false/type=null`；未登记 ID 或越权返回 `denied`，参数数量非法返回 `error`。批量中任一引用失败时整次结果失败，不登记部分成功证据。
 
 路径结果包含授权时的基准目录名称，来源 `local/collector` 表示命令运行主机，采集时间是检查时刻。与目标环境的关联需要用户提供事实，不能由导入快照推定。该目录句柄须保持打开直到检查完成；材料读取仍使用登记时固定内容。
+
+## 本地文档检索
+
+`SearchDocsArguments` 接受去除首尾空白后 1～500 字符的查询、可选故障类别及 1～3 条结果限制。`DocumentIndex` 只从固定包目录安全读取 `documents.json`，首次查询后在会话内固定内容。语料模型校验文档 ID 唯一、URL、版本、带时区整理时间、摘要长度及最多 25 条记录；不接受引用外部文件的字段。安装目录可包含 `.venv` 等隐藏组件，所有链接、越界、gold 与隐藏的相对文件路径仍被拒绝。
+
+当前语料为 15 条人工改写摘要，`content_kind=curated_summary`，五类故障各 3 条。检索采用 BM25 排序，标题、关键词和摘要合并索引，固定 `k1=1.2/b=0.75`，采用正值 IDF。索引保留词频；查询词去重并排序后累加，以保证重复查询词不增加分数及排序可复现。完整语料统计不随类别过滤变化。英文忽略大小写，保留异常名、下划线标识符、点分 API 及逐级后缀；中文按相邻双字切分。先过滤类别，再返回正分数结果，同分按文档 ID 排序；计算公式见 [语料说明](../knowledge/README.md)。
+
+返回 `data={query, category, matches, total}`；`matches` 每项包含文档完整元数据、`excerpt` 与浮点 `score`。`total` 是过滤后正分数匹配总数，超出返回条数时工具标记 `truncated=true`，摘要本身不截断。无匹配是 `ok` 加空列表；参数或语料结构非法为 `error`，固定语料读取受权限/路径限制时为 `denied`。失败保留工具记录，不登记部分证据。
+
+文档证据来源为 `document/D001…`，包含来源 URL 和适用版本；位置 `/excerpt` 相对于该文档记录，`collected_at` 是语料整理时间。工具结果来源为 `local/docs_index/collector`，时间是本次查询时刻。同一会话的重复命中复用证据 ID，调用仍计数。该工具不修改目标环境或产生诊断报告。
+
+独立入口为 `search-docs QUERY [--category CATEGORY] [--max-results N]`；`collect --docs-query QUERY [--docs-category CATEGORY]` 在取证末尾追加一次检索。两者均输出完整校验后的 `DiagnosisState`。文档版本不自动与目标环境匹配，文档内容仍是不可信数据；模型使用文档作实例结论的语义支持检查尚未实现。
