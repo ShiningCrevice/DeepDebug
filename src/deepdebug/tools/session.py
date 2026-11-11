@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from deepdebug.agent.actions import (
     CheckPathsArguments,
+    InspectEnvironmentArguments,
     ParseLogArguments,
     ReadArtifactArguments,
     SearchDocsArguments,
@@ -236,12 +237,20 @@ class CollectionSession:
             ),
         )
 
-    def inspect_snapshot(self, artifact_id: str, *, as_target: bool = True) -> ToolResult:
-        """Host binds an explicit artifact; future model dispatch will resolve environment IDs."""
+    def inspect_snapshot(
+        self, artifact_id: str, *, as_target: bool = True, probe_ids: list[str] | None = None
+    ) -> ToolResult:
+        """Read all fields for collection, or only the probes requested by the controller."""
 
         def operation(item):
             snapshot, raw = self._snapshot(item)
             target = snapshot.environment
+            selected = InspectEnvironmentArguments(
+                environment_id=target.environment_id,
+                probe_ids=probe_ids
+                if probe_ids is not None
+                else ["python_identity", "package_metadata", "torch_cuda"],
+            ).probe_ids
             # Use the original JSON values, so omitted optional fields aren't invented evidence.
             source = Source(kind="snapshot", id=artifact_id, environment_id=target.environment_id)
             observations = [
@@ -253,10 +262,16 @@ class CollectionSession:
                 )
                 for pointer, value in [
                     ("/environment", raw["environment"]),
-                    ("/python_version", raw["python_version"]),
+                    *(
+                        [("/python_version", raw["python_version"])]
+                        if "python_identity" in selected
+                        else []
+                    ),
                 ]
             ]
-            for index, package in enumerate(raw.get("packages", [])):
+            for index, package in enumerate(
+                raw.get("packages", []) if "package_metadata" in selected else []
+            ):
                 observations.append(
                     dict(
                         source=source,
@@ -265,7 +280,7 @@ class CollectionSession:
                         collected_at=target.collected_at,
                     )
                 )
-            if raw.get("torch_cuda") is not None:
+            if "torch_cuda" in selected and raw.get("torch_cuda") is not None:
                 observations.append(
                     dict(
                         source=source,
@@ -274,7 +289,18 @@ class CollectionSession:
                         collected_at=snapshot.torch_cuda.collected_at,
                     )
                 )
-            return snapshot.model_dump(mode="json"), observations, False, target, None
+            data = snapshot.model_dump(mode="json")
+            if probe_ids is not None:
+                fields = {
+                    "python_identity": "python_version",
+                    "package_metadata": "packages",
+                    "torch_cuda": "torch_cuda",
+                }
+                data = {
+                    "environment": data["environment"],
+                    **{fields[p]: data[fields[p]] for p in selected},
+                }
+            return data, observations, False, target, None
 
         return self._run(
             "inspect_environment",
@@ -282,8 +308,25 @@ class CollectionSession:
             "读取指定环境快照中的解释器与包元数据。",
             operation,
             as_target=as_target,
-            arguments_summary=f"snapshot_artifact_id={artifact_id}, as_target={as_target}",
+            arguments_summary=(
+                f"snapshot_artifact_id={artifact_id}, as_target={as_target}, probe_ids={probe_ids}"
+            ),
         )
+
+    def record_failure(
+        self, tool: ToolName, purpose: str, arguments_summary: str, status: str, error: str
+    ) -> ToolResult:
+        """Record a dispatch refusal with the same envelope as executed tools."""
+
+        def operation(_item):
+            raise ObservationFailure(
+                status,
+                error,
+                Source(kind="local", id="tool_dispatcher", environment_id="collector"),
+                datetime.now(timezone.utc),
+            )
+
+        return self._run(tool, None, purpose, operation, arguments_summary=arguments_summary)
 
     def query_gpu(self, artifact_id: str) -> ToolResult:
         def operation(item):

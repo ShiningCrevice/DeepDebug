@@ -2,7 +2,7 @@
 
 面向 PyTorch 训练与推理故障的诊断助手。目标是根据日志、代码、配置和环境快照，按需补充证据，输出可追溯的候选根因、修复建议和验证方法。
 
-**当前状态：已完成 Step 10（五类真实故障种子），可采集环境快照、检查登记路径、通过 BM25 检索本地官方文档摘要并通过 CLI 只读取证，尚不支持自动诊断。** 包含材料边界、日志解析、Python/包元数据与可选 PyTorch/CUDA、GPU 采集、15 条文档语料、证据编号和工具记录。
+**当前状态：已完成 Step 11（离线单 Agent 控制循环）。** 支持环境快照采集、CLI 只读取证、本地 BM25 文档检索，以及固定模型响应驱动的工具调度、假设更新、预算停止、JSON 报告和 JSONL 轨迹。云端自动诊断尚未开放；回放用于验证控制流程，不代表模型诊断效果。
 
 ## 文档导航
 
@@ -27,7 +27,7 @@ uv run --locked python -m deepdebug
 uv run --locked deepdebug schema action
 ```
 
-`uv sync` 创建项目内 `.venv`，安装项目与开发依赖；首次安装需要可用的包源。若使用其他兼容解释器，可执行 `uv sync --locked --python 3.10`。依赖精确版本保存在 `uv.lock`。初始化阶段不读取 `.env`，`.env.example` 仅说明后续配置位置。
+`uv sync` 创建项目内 `.venv`，安装项目与开发依赖；首次安装需要可用的包源。若使用其他兼容解释器，可执行 `uv sync --locked --python 3.10`。依赖精确版本保存在 `uv.lock`。当前不读取 `.env`，`.env.example` 仅说明后续配置位置。
 
 ## 开发检查
 
@@ -38,7 +38,27 @@ uv run --locked pytest
 uv build
 ```
 
-测试覆盖 CLI、协议非法输入、报告引用与验证状态、证据原始位置、路径边界、探针隔离与超时/输出限制、无 GPU 降级、文档检索相关性与语料隔离。诊断效果待模型循环接入后评测。
+测试覆盖 CLI、协议与证据引用、路径边界、探针隔离与降级、文档检索，以及固定响应控制循环的权限、缓存、预算、停止、错误修正和轨迹。真实模型诊断效果待云端接入后评测。
+
+## 离线控制循环回放
+
+```bash
+mkdir -p runs
+uv run --locked deepdebug replay \
+  --root benchmark/dev/dep_002/materials \
+  --log log.txt --config launch.json \
+  --snapshot target_snapshot.json --snapshot project_snapshot.json \
+  --responses examples/dep_002_replay.json \
+  --trace runs/dep_002-trace.jsonl
+```
+
+命令将含 `report` 的完整状态 JSON 输出到标准输出。示例固定响应先提出缺包候选，再通过真实的配置和快照工具结果更新为解释器不一致；响应是人工编写的 synthetic 演示，不调用云端、不计入诊断效果。报告保留证据引用、修复建议和验证判据，修复状态为“未执行”。
+
+`--trace` 可选，逐行写入决策、工具调用、缓存命中、错误及停止时的完整状态；仅新建文件，重复运行需换一个文件名。状态与轨迹保留原始材料片段、路径及环境信息，未经脱敏，仅供本地检查；当前无自动清理。响应格式见 [示例说明](examples/README.md)，决策 Schema 可用 `deepdebug schema decision` 导出。
+
+默认最多 6 次决策、8 次工具调用、120 秒；可用 `--max-decisions`、`--max-tools`、`--max-seconds` 调整。首轮日志解析计入工具预算。同名同参调用复用结果和证据；连续两轮没有新证据或假设变化时停止。无效决策最多修正一次，瞬时模型接口失败最多重试一次，均计入决策预算。Token 用量由回放文件提供模拟值，默认 0；真实供应商用量与请求超时尚未验证。
+
+回放沿用 `--code`、`--config`、`--snapshot`、`--path` 与 `--path-root` 的显式登记边界。第一份快照为目标，环境 ID 必须唯一；模型只能读取选定探针对应的快照字段。退出码：`0` 表示完成、请求补充信息或无进展停止；`1` 表示预算、模型接口、无效动作或工具不可用导致停止；`2` 表示输入或输出文件错误。具体原因以状态的 `stop_reason` 和工具历史为准。
 
 ## 本地取证
 
@@ -107,7 +127,7 @@ Python 探针使用 `-I` 和项目目录外的临时工作目录；元数据探�
 
 ## 数据协议与开发案例
 
-`deepdebug schema <kind>` 输出 JSON Schema，`kind` 可选 `action`、`state`、`report`、`snapshot`。接口字段及约束见 [协议说明](docs/tool-api.md)。
+`deepdebug schema <kind>` 输出 JSON Schema，`kind` 可选 `action`、`state`、`report`、`snapshot`、`decision`。接口字段及约束见 [协议说明](docs/tool-api.md)。
 
 依赖案例位于 `benchmark/dev/dep_001` 与 `dep_002`。它们具有相同的 `ModuleNotFoundError` 日志，分别通过环境快照和启动配置体现“目标环境缺包”与“使用了错误解释器”。日志和快照来自实际 Python 进程，未执行 PyTorch 训练；所有 `/demo/` 路径均为脱敏别名，不能直接执行。案例分属同一案例族，均留在开发集。
 
@@ -132,7 +152,8 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 | 路径 | 职责 |
 |---|---|
 | `src/deepdebug/cli.py` | 命令行参数与入口 |
-| `src/deepdebug/agent/` | 已实现协议、动作校验与状态；控制器待实现 |
+| `src/deepdebug/agent/` | 协议、单 Agent 控制器、决策校验、预算停止与轨迹 |
+| `src/deepdebug/llm/`、`src/deepdebug/replay.py` | 模型接口、固定响应客户端与离线回放流程 |
 | `src/deepdebug/tools/` | 材料登记、日志解析、环境采集与快照读取、路径引用、本地文档检索和取证会话 |
 | `src/deepdebug/knowledge/`、`knowledge/` | 随包发布的固定文档语料、来源清单与维护说明 |
 | `src/deepdebug/security/` | 已实现只读路径边界；自动脱敏待实现 |
@@ -141,14 +162,14 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 | `tests/` | 自动化检查 |
 | `docs/` | 架构决策与逐步进度 |
 | `benchmark/`、`scripts/` | 六个开发案例、人工参考状态、开发案例与用户环境采集脚本 |
-| `examples/` | 演示材料的预留位置 |
+| `examples/` | 人工固定响应与回放演示说明 |
 
-模型接口与报告渲染模块在实现对应功能时创建。Streamlit 和模型 SDK 在对应阶段引入；当前 BM25 检索使用标准库。
+JSON 报告由控制器组装并校验，Markdown 渲染待实现。Streamlit 和模型 SDK 在对应阶段引入；当前 BM25 检索使用标准库。
 
 ## 范围与边界
 
 首版聚焦 OOM、设备不一致、依赖/解释器、路径和配置/形状五类问题。采用单 Agent 状态机，默认导入环境快照；本机采集需要用户明确选择。模型不得执行任意代码或 shell、安装依赖、修改用户文件或重跑真实训练。上传材料和检索文档均是不可信数据。
 
-当前已实现材料与路径边界、大小检查、固定环境探针的超时和输出限制、固定语料检索；尚未实现自动脱敏、模型动作调度、会话预算强制停止或证据语义判断。取证状态中的调用次数和耗时仅作记录。内置验证只针对开发者维护的预置案例，不能等同于真实训练恢复。`runs/`、`sessions/` 已被 Git 忽略，尚无自动保存或清理功能。不得提交真实密钥和私有日志。
+当前已实现材料与路径边界、大小检查、固定环境探针的超时和输出限制、固定语料检索，以及离线控制器的动作调度和预算停止。自动脱敏、云端接入及证据语义评测待实现。`collect` 中的调用次数和耗时仅作记录，`replay` 执行停止判断；同步本地工具在返回后检查总时限，不提供抢占式中断。内置验证只针对开发者维护的预置案例，不能等同于真实训练恢复。`runs/`、`sessions/` 已被 Git 忽略，会话自动保存与清理待实现。不得提交真实密钥和私有日志。
 
 下一步：推进第 3 周模型接口、单 Agent 控制循环、预算停止和运行轨迹；接入云端模型前完成脱敏预览与材料范围确认。

@@ -2,7 +2,7 @@
 
 本文按协议和工具说明当前参数、返回值及约束。架构与设计理由见 [架构设计](design.md)，改动历史与验证结果见 [开发进度](progress.md)，CLI 使用示例见 [README](../README.md)。
 
-协议实现位于 `src/deepdebug/agent/`，协议自身不执行文件读取、探针或模型调用。使用 `deepdebug schema action/state/report/snapshot` 导出当前 JSON Schema。宿主接口见下文的材料登记、取证会话、环境采集、路径检查和文档检索章节。
+协议实现位于 `src/deepdebug/agent/`，协议自身不执行文件读取、探针或模型调用。使用 `deepdebug schema action/state/report/snapshot/decision` 导出当前 JSON Schema。宿主接口见下文的材料登记、取证会话、环境采集、路径检查和文档检索章节。
 
 ## 类型与边界
 
@@ -39,7 +39,7 @@
 
 七个规划工具均有参数类型：日志解析、材料读取、路径检查、环境检查、GPU 查询、文档检索和内置检查。读取最多 200 行，路径检查最多 10 个登记引用，检索最多 3 条。探针只允许 `python_identity/package_metadata/torch_cuda`；`dependency_import/interpreter_identity` 是预留的内置检查 ID，当前没有执行器。`need_info` 必须给出具体问题。
 
-环境 ID 和路径引用 ID 是不透明标识。宿主现已可显式登记路径并按引用 ID 检查；模型动作到环境/路径注册表的调度、错误动作重试、缓存和停止策略由后续控制器落实。
+环境 ID 和路径引用 ID 是不透明标识。`ToolDispatcher` 把环境 ID 映射到登记快照，重复或无效环境拒绝绑定；路径 ID 必须在宿主授权清单中。只读工具接受校验后的参数，内置检查返回 `unavailable`。
 
 ## 报告与状态一致性
 
@@ -49,13 +49,31 @@
 
 验证状态为 `静态检查通过/预置复现通过/失败/无法执行/未执行`。前三种必须附执行时间、环境、退出码、输出和证据引用；通过要求退出码为 0；失败输出不得截断。后两种不接受已经执行检查的记录，必须说明原因。若探测环境失败，应在工具历史中记录该探测，而非伪造验证执行。
 
-协议校验覆盖结构与一致性。证据真实性、语义支持和实际执行情况需另行核实；后续控制器必须自己登记证据与执行记录。最终报告须通过完整 `DiagnosisState` 校验。
+协议校验覆盖结构与一致性。证据真实性、语义支持和实际执行情况需另行核实；控制器只接受模型判断字段，由工具登记证据；目前修复验证统一为“未执行”。最终报告须通过完整 `DiagnosisState` 校验。
 
 ## 预算与更新
 
-`Budget` 默认 6 次决策、8 次工具、1 次报告修正、50,000 token（含预留 5,000）、120 秒总时限，普通工具 10 秒、GPU 探针 15 秒。当前记录实际工具调用次数与耗时，并校验预算配置和计数，尚未强制执行会话预算停止；允许记录超过上限的实际用量，以便保留超时/超支事实。
+`Budget` 默认 6 次决策、8 次工具、1 次报告修正、50,000 token（含预留 5,000）、120 秒总时限，普通工具 10 秒、GPU 探针 15 秒。`collect` 仅记账；`Controller` 在决策、模型返回和工具边界检查决策数、工具数、总 token 与总耗时。首轮日志解析计入工具数，修正无效决策和重试接口失败计入决策数；缓存命中不增加工具计数。最后一次允许的决策仍可正常结束或执行预算内工具，下轮不再请求模型。
 
-协议对象不是不可变存储。嵌套列表修改、直接赋值或 `model_copy(update=...)` 不自动完成全状态校验；在后续持久化、调度和输出边界调用 `DiagnosisState.model_validate`（对象会重新校验）或 `model_validate_json`。
+决策可用 token 是总额减报告预留与已用量；返回时耗尽额度则保留用量并停止，不执行该响应动作。当前回放用量是文件声明的模拟值，默认 0。报告由宿主组装，无额外模型调用；`max_report_repairs/report_repairs` 暂保留，后者为 0。允许记录超过限额的实际返回值，以保留超时/超支事实。同步本地工具不能被总时限抢占，返回后停止后续工作；工具单次 timeout 字段尚不作用于这些内存/文件查询。
+
+连续两轮无新证据或假设变化时 `no_progress`；无效决策最多修正一次，仍无效时 `invalid_action`。模型接口 timeout/unavailable 最多重试一次，失败时 `model_error`；非瞬时 error 直接停止。所有停止路径输出通过完整状态校验的 JSON 报告，预算与错误停止保留已有证据、候选和未决问题。
+
+协议对象不是不可变存储。嵌套列表修改、直接赋值或 `model_copy(update=...)` 不自动完成全状态校验；持久化、调度和输出边界调用 `DiagnosisState.model_validate`（对象会重新校验）或 `model_validate_json`。
+
+## 模型接口与离线决策
+
+`ModelClient.decide(ModelRequest) → ModelResponse`：请求含 `instructions`、`state` 副本、`environments`（环境 ID → 材料 ID）、`path_reference_ids`、`response_schema`、可选 `correction`、`timeout_seconds` 与 `max_tokens`（输入输出合计剩余额度）。响应含原始 JSON `content` 和非负整数 `input_tokens/output_tokens`。适配器应遵守时间和额度；当前仅提供离线 `ReplayModelClient`，控制器拒绝 `transport=remote`。真实供应商用量与网络取消尚未实现。
+
+`Decision` 含 `observation`（新增事实/判断变化摘要）、`hypotheses`、`action`；仅 finish 必须含 `conclusion={summary, category, fixes, unresolved_questions}`。finish 可声明 completed/tools_unavailable/no_progress；缺信息须用 need_info，预算与接口错误由宿主决定。结论不接受证据内容、工具历史或验证执行字段，引用在提交前按当前状态校验。材料与文档通过请求状态提供，系统指令明确其为不可信数据。
+
+`replay --responses FILE` 的文件是数组，每项包含 `decision` 对象或原始字符串，以及可选模拟用量；原始字符串可用于测试无效 JSON。文件通过相同只读目录边界加载，最多 2 MiB；响应不是执行代码。示例与命令见 [examples](../examples/README.md)。
+
+## JSONL 轨迹
+
+`JsonlTrace(stream).write(event, state, details)` 在写入前重校验完整状态，并逐行 flush。每行含递增 `sequence`、带时区 `recorded_at`、`session_id`、`event`、`details` 和完整 `state`。
+
+事件为 start、model_request、model_response、model_error、invalid_decision、decision、tool、stop。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹，使用固定错误分类。`--trace` 仅新建文件，轨迹原文未经脱敏，不自动删除，不支持恢复执行。
 
 ## 材料登记
 
@@ -71,16 +89,16 @@
 |---|---|
 | `parse_log(artifact_id, context_lines=5)` | 普通 Python 异常摘要、原始日志行号、文件/行号/函数堆栈位置与有限上下文；保留最近 5 个异常和 10 个帧，不判断根因 |
 | `read_artifact(artifact_id, start_line=1, max_lines=200)` | 最多 200 行、16,000 字符；保留起止行和截断标志，不执行 Python 或解析 YAML |
-| `inspect_snapshot(artifact_id, as_target=True)` | 以 `inspect_environment` 记录快照模式结果；校验快照及环境 ID 冲突，证据保留采集时间、JSON Pointer 与原始 JSON 值 |
+| `inspect_snapshot(artifact_id, as_target=True, probe_ids=None)` | 以 `inspect_environment` 记录快照模式结果；校验快照及环境 ID 冲突，证据保留采集时间、JSON Pointer 与原始 JSON 值 |
 | `query_gpu(artifact_id)` | 读取已登记快照的 GPU 字段，成功证据指向 `/gpu`；保留采样时间，失败状态进入历史，缺字段返回 `unavailable` |
 | `check_paths(references, reference_ids)` | 查询宿主已登记的最多 10 个路径引用，结果含存在性、文件/目录类型和授权基准目录；观察来源为 `local/collector` |
 | `search_docs(query, category=None, max_results=3)` | 检索固定本地语料，返回文档 ID、URL、版本、整理时间与摘要，登记 `document` 来源证据 |
 
-快照宿主接口显式绑定材料 ID；未来模型调度层需把动作协议的 `environment_id/probe_ids` 映射到授权快照及固定探针，当前不接受模型直接调度。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
+快照宿主接口显式绑定材料 ID；调度层把 `environment_id` 绑定至授权快照，按 `probe_ids` 返回环境元数据及所选字段：python_identity → python_version、package_metadata → packages、torch_cuda → torch_cuda。环境元数据始终返回，未采集 torch_cuda 时字段为 null；证据保留原始 JSON，缺失字段不生成证据。`probe_ids=None` 沿用宿主全字段读取。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
 
 工具结果完整 JSON 最多 64 KiB，超限返回拒绝结果。证据内容总量另受材料大小和片段上限约束。读取片段时只要省略原文部分就标记 `truncated`。日志支持常见 Python traceback 和异常链；分布式前缀、多语言日志、ExceptionGroup 树形堆栈尚未专门支持。无匹配时返回空异常列表。
 
-`EvidenceRegistry` 根据来源、位置、内容、时间与截断标记去重；重复读取复用证据 ID，工具调用仍记录新 `T001…`，尚未实现工具缓存。每次工具执行后重新校验完整状态。工具历史记录失败，未知材料 ID 返回 `denied`，非法参数/快照返回 `error`，二者不携带成功 data。登记阶段失败则中止 CLI，不构造不完整会话。
+`EvidenceRegistry` 根据来源、位置、内容、时间与截断标记去重；重复读取复用证据 ID，宿主直接调用仍记录新 `T001…`；控制器调度的同名同参调用由缓存复用原结果。每次工具执行后重新校验完整状态。工具历史记录失败，未知材料 ID 返回 `denied`，非法参数/快照返回 `error`，二者不携带成功 data。登记阶段失败则中止 CLI，不构造不完整会话。
 
 取证输出 `DiagnosisState`，假设列表为空，报告与诊断停止原因为 null。调用数与取证会话耗时会记录，预算上限和自动清理尚未执行。固定环境子进程已执行单次超时和输出限制。所有输出只在本地，未经脱敏。
 
@@ -106,6 +124,6 @@ Python 身份采集失败不输出快照；可选探针失败时仍保留 Python
 
 返回 `data={query, category, matches, total}`；`matches` 每项包含文档完整元数据、`excerpt` 与浮点 `score`。`total` 是过滤后正分数匹配总数，超出返回条数时工具标记 `truncated=true`，摘要本身不截断。无匹配是 `ok` 加空列表；参数或语料结构非法为 `error`，固定语料读取受权限/路径限制时为 `denied`。失败保留工具记录，不登记部分证据。
 
-文档证据来源为 `document/D001…`，包含来源 URL 和适用版本；位置 `/excerpt` 相对于该文档记录，`collected_at` 是语料整理时间。工具结果来源为 `local/docs_index/collector`，时间是本次查询时刻。同一会话的重复命中复用证据 ID，调用仍计数。该工具不修改目标环境或产生诊断报告。
+文档证据来源为 `document/D001…`，包含来源 URL 和适用版本；位置 `/excerpt` 相对于该文档记录，`collected_at` 是语料整理时间。工具结果来源为 `local/docs_index/collector`，时间是本次查询时刻。同一会话的重复命中复用证据 ID，宿主直接调用仍计数，控制器缓存命中不计数。该工具不修改目标环境或产生诊断报告。
 
 独立入口为 `search-docs QUERY [--category CATEGORY] [--max-results N]`；`collect --docs-query QUERY [--docs-category CATEGORY]` 在取证末尾追加一次检索。两者均输出完整校验后的 `DiagnosisState`。文档版本不自动与目标环境匹配，文档内容仍是不可信数据；模型使用文档作实例结论的语义支持检查尚未实现。

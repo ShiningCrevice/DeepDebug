@@ -4,31 +4,47 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
+from contextlib import nullcontext
 from importlib.metadata import version
 from pathlib import Path
 from typing import get_args
 
 from deepdebug.agent.actions import ACTION_ADAPTER
+from deepdebug.agent.decision import Decision
 from deepdebug.agent.schemas import Category, DiagnosisReport, EnvironmentSnapshot
-from deepdebug.agent.state import DiagnosisState
+from deepdebug.agent.state import Budget, DiagnosisState
 from deepdebug.collection import collect, search_documents
+from deepdebug.replay import load_replay, replay
 from deepdebug.security.paths import MaterialError
 from deepdebug.tools.capture import CaptureError, capture_environment
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Parse commands and emit local JSON; never call a model or execute input code."""
+    """Parse commands and emit local JSON, including offline model-response replay."""
     parser = argparse.ArgumentParser(
         prog="deepdebug",
         description="DeepDebug：面向 PyTorch 故障的证据驱动诊断助手。",
-        epilog="当前阶段：本地材料取证；自动诊断尚未实现。collect 输出未经脱敏，不发送网络请求。",
+        epilog="支持本地取证和固定模型响应回放；输出未经脱敏，云端诊断尚未开放。",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {version('deepdebug-agent')}"
     )
     commands = parser.add_subparsers(dest="command")
     schema = commands.add_parser("schema", help="输出数据协议的 JSON Schema")
-    schema.add_argument("kind", choices=["action", "state", "report", "snapshot"])
+    schema.add_argument("kind", choices=["action", "state", "report", "snapshot", "decision"])
+    replay_parser = commands.add_parser("replay", help="离线回放固定模型响应，输出状态与 JSON 报告")
+    replay_parser.add_argument("--root", type=Path, required=True, help="独立材料目录")
+    replay_parser.add_argument("--log", required=True)
+    replay_parser.add_argument("--code", action="append", default=[])
+    replay_parser.add_argument("--config", action="append", default=[])
+    replay_parser.add_argument("--snapshot", action="append", default=[])
+    replay_parser.add_argument("--path", action="append", default=[])
+    replay_parser.add_argument("--path-root", type=Path)
+    replay_parser.add_argument("--responses", type=Path, required=True, help="固定响应 JSON 文件")
+    replay_parser.add_argument("--trace", type=Path, help="新建 JSONL 轨迹文件；父目录须已存在")
+    replay_parser.add_argument("--max-decisions", type=int, default=6)
+    replay_parser.add_argument("--max-tools", type=int, default=8)
+    replay_parser.add_argument("--max-seconds", type=int, default=120)
     search = commands.add_parser("search-docs", help="检索本地官方文档摘要并输出带证据的状态")
     search.add_argument("query", help="查询词，1～500 字符")
     search.add_argument("--category", choices=get_args(Category), help="按故障类别过滤")
@@ -53,6 +69,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument("--docs-query", help="追加一次本地文档检索，最多返回 3 条")
     collection.add_argument("--docs-category", choices=get_args(Category), help="文档故障类别过滤")
     args = parser.parse_args(argv)
+    if args.command == "replay":
+        if args.path_root and not args.path:
+            parser.error("--path-root 需要至少一个 --path。")
+        try:
+            model = load_replay(args.responses)
+            budget = Budget(
+                max_decision_calls=args.max_decisions,
+                max_tool_calls=args.max_tools,
+                max_duration_seconds=args.max_seconds,
+            )
+            trace_context = (
+                args.trace.open("x", encoding="utf-8") if args.trace else nullcontext(None)
+            )
+            with trace_context as stream:
+                state = replay(
+                    args.root,
+                    args.log,
+                    args.code,
+                    args.config,
+                    args.snapshot,
+                    model,
+                    budget=budget,
+                    paths=args.path,
+                    path_root=args.path_root,
+                    trace_stream=stream,
+                )
+        except (OSError, ValueError, MaterialError):
+            print(
+                "回放失败：请检查材料、响应文件、预算与轨迹路径；轨迹文件不得已存在。",
+                file=sys.stderr,
+            )
+            return 2
+        print(state.model_dump_json(indent=2))
+        return 0 if state.stop_reason in {"completed", "need_info", "no_progress"} else 1
     if args.command == "search-docs":
         state = search_documents(args.query, args.category, args.max_results)
         print(state.model_dump_json(indent=2))
@@ -106,6 +156,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "state": DiagnosisState.model_json_schema,
             "report": DiagnosisReport.model_json_schema,
             "snapshot": EnvironmentSnapshot.model_json_schema,
+            "decision": Decision.model_json_schema,
         }
         print(json.dumps(schemas[args.kind](), ensure_ascii=False, indent=2))
         return 0

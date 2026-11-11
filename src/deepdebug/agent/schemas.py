@@ -32,6 +32,7 @@ StopReason = Literal[
     "budget_exhausted",
     "tools_unavailable",
     "invalid_action",
+    "model_error",
 ]
 ToolName = Literal[
     "parse_log",
