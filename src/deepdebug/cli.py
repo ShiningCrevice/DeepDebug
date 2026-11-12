@@ -14,8 +14,14 @@ from deepdebug.agent.decision import Decision
 from deepdebug.agent.schemas import Category, DiagnosisReport, EnvironmentSnapshot
 from deepdebug.agent.state import Budget, DiagnosisState
 from deepdebug.collection import collect, search_documents
-from deepdebug.replay import load_replay, replay
+from deepdebug.replay import load_replay, replay, replay_reviewed
 from deepdebug.security.paths import MaterialError
+from deepdebug.security.review import (
+    confirm_materials,
+    load_review,
+    preview_materials,
+    save_review,
+)
 from deepdebug.tools.capture import CaptureError, capture_environment
 
 
@@ -24,7 +30,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="deepdebug",
         description="DeepDebug：面向 PyTorch 故障的证据驱动诊断助手。",
-        epilog="支持本地取证和固定模型响应回放；输出未经脱敏，云端诊断尚未开放。",
+        epilog="支持本地取证、脱敏预览和固定模型响应回放；云端诊断尚未开放。",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {version('deepdebug-agent')}"
@@ -32,9 +38,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command")
     schema = commands.add_parser("schema", help="输出数据协议的 JSON Schema")
     schema.add_argument("kind", choices=["action", "state", "report", "snapshot", "decision"])
+    preview = commands.add_parser("preview", help="预览显式材料的脱敏副本，保存待确认 JSON")
+    preview.add_argument("--root", type=Path, required=True, help="独立材料目录")
+    preview.add_argument("--log", required=True)
+    preview.add_argument("--code", action="append", default=[])
+    preview.add_argument("--config", action="append", default=[])
+    preview.add_argument("--snapshot", action="append", default=[])
+    preview.add_argument("--output", type=Path, required=True, help="新建本地预览文件")
+    confirm = commands.add_parser("confirm", help="按已核查的 SHA-256 确认全部预览材料")
+    confirm.add_argument("--preview", type=Path, required=True)
+    confirm.add_argument("--sha256", required=True, help="核查预览内容后填写其 sha256")
+    confirm.add_argument("--output", type=Path, required=True, help="新建已确认材料文件")
     replay_parser = commands.add_parser("replay", help="离线回放固定模型响应，输出状态与 JSON 报告")
-    replay_parser.add_argument("--root", type=Path, required=True, help="独立材料目录")
-    replay_parser.add_argument("--log", required=True)
+    replay_source = replay_parser.add_mutually_exclusive_group(required=True)
+    replay_source.add_argument("--root", type=Path, help="独立材料目录")
+    replay_source.add_argument("--reviewed", type=Path, help="使用已确认脱敏材料文件")
+    replay_parser.add_argument("--log")
     replay_parser.add_argument("--code", action="append", default=[])
     replay_parser.add_argument("--config", action="append", default=[])
     replay_parser.add_argument("--snapshot", action="append", default=[])
@@ -69,10 +88,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument("--docs-query", help="追加一次本地文档检索，最多返回 3 条")
     collection.add_argument("--docs-category", choices=get_args(Category), help="文档故障类别过滤")
     args = parser.parse_args(argv)
+    if args.command in {"preview", "confirm"}:
+        try:
+            if args.command == "preview":
+                review = preview_materials(
+                    args.root, args.log, args.code, args.config, args.snapshot
+                )
+            else:
+                review = confirm_materials(load_review(args.preview), args.sha256)
+            save_review(args.output, review)
+        except (OSError, ValueError, RecursionError):
+            print(
+                "材料预览/确认失败：检查输入、内容摘要和输出路径；输出文件必须不存在。",
+                file=sys.stderr,
+            )
+            return 2
+        print(review.model_dump_json(indent=2))
+        if args.command == "preview":
+            print(
+                "请核查全部 text 及材料范围；自动脱敏可能遗漏。"
+                "确认仅供本地回放，云端发送尚未开放。",
+                file=sys.stderr,
+            )
+        return 0
     if args.command == "replay":
+        if args.root and not args.log:
+            parser.error("--root 需要 --log。")
+        if args.reviewed and any(
+            (args.log, args.code, args.config, args.snapshot, args.path, args.path_root)
+        ):
+            parser.error("--reviewed 仅使用已确认材料，不能追加原始材料或本机路径。")
         if args.path_root and not args.path:
             parser.error("--path-root 需要至少一个 --path。")
         try:
+            review = load_review(args.reviewed) if args.reviewed else None
+            if review is not None and review.status != "confirmed":
+                raise ValueError("材料尚未确认。")
             model = load_replay(args.responses)
             budget = Budget(
                 max_decision_calls=args.max_decisions,
@@ -83,18 +134,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.trace.open("x", encoding="utf-8") if args.trace else nullcontext(None)
             )
             with trace_context as stream:
-                state = replay(
-                    args.root,
-                    args.log,
-                    args.code,
-                    args.config,
-                    args.snapshot,
-                    model,
-                    budget=budget,
-                    paths=args.path,
-                    path_root=args.path_root,
-                    trace_stream=stream,
-                )
+                if review is not None:
+                    state = replay_reviewed(review, model, budget=budget, trace_stream=stream)
+                else:
+                    state = replay(
+                        args.root,
+                        args.log,
+                        args.code,
+                        args.config,
+                        args.snapshot,
+                        model,
+                        budget=budget,
+                        paths=args.path,
+                        path_root=args.path_root,
+                        trace_stream=stream,
+                    )
         except (OSError, ValueError, MaterialError):
             print(
                 "回放失败：请检查材料、响应文件、预算与轨迹路径；轨迹文件不得已存在。",

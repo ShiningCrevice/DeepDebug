@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 11（离线单 Agent 控制循环）：六个真实开发案例覆盖五类，CLI 取证与本地 BM25 检索已完成；新增固定响应模型接口、受限调度、预算停止、JSON 报告和 JSONL 轨迹。第 1、2 周验收完成；第 3 周预算与轨迹已验收，真实模型端到端诊断待完成。
-- `replay` 使用 synthetic 固定响应驱动真实工具；示例展示假设变化，不计为模型诊断效果。快照证据保留原始 JSON 值，报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步实现脱敏预览与材料范围确认，再接入云端模型并完成五类端到端诊断；当前控制器拒绝 remote 客户端。
+- 当前完成 Step 12（脱敏预览与材料范围确认）：`preview` 生成脱敏副本，`confirm` 按 SHA-256 确认全部材料，`replay --reviewed` 从固定副本生成证据、报告与轨迹。第 1、2 周验收完成；第 3 周预算与轨迹已验收，真实模型端到端诊断待完成。
+- `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
+- 下一步实现云端发送边界与模型适配，再完成五类端到端诊断；当前确认仅用于本地回放，控制器继续拒绝 remote 客户端。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
@@ -30,7 +30,7 @@
 - `scripts/capture_dependency_cases.py` 和 `scripts/capture_failure_cases.py` 是开发用固定采集脚本，不是 Agent 工具。后者显式选择解释器和案例，配额 OOM 固定申请 64 MiB，不等同于整卡显存耗尽；缺少环境不生成案例。参考状态/报告位于 `benchmark/gold/dev/`，均为人工编写，修复未执行。
 - `snapshot` / `scripts/collect_environment.py` 由用户显式选择解释器采集；`--torch-cuda`、`--gpu` 可选。`collect` 只读取环境快照；路径检查来自本机 `collector`，不能当成目标快照环境的文件状态。真实 PyTorch/CUDA 可用性已采集；当前 WSL 的 nvidia-smi 不在系统默认搜索路径，自动 GPU 显存摘要仍不可用。
 
-- `collect` 是宿主驱动的只读取证；`replay` 执行离线控制循环。工具成功不能当成诊断或修复成功。材料、状态与轨迹未经脱敏，保持 `redaction_status=pending`；云端接入须完成脱敏与确认。
+- `collect` 是宿主驱动的只读取证；`replay` 执行离线控制循环。工具成功不能当成诊断或修复成功。`collect` 与 `replay --root` 保持未脱敏的 `pending` 材料；`replay --reviewed` 只读取确认副本，材料为 `reviewed`，状态和轨迹记录确认摘要。自动规则须人工核查，确认不是云端发送授权；当前不允许给已确认回放追加原始材料或本机路径。
 - 安全材料读取需要 POSIX `dir_fd/O_NOFOLLOW`；所有链接均拒绝。工具读取登记时固定的内容，保证行号和证据一致。
 - 文档检索只读取 `src/deepdebug/knowledge/documents.json` 的随包副本，来源清单见 `knowledge/README.md`；不得索引仓库或 gold。固定包目录可位于隐藏的虚拟环境目录，用户材料仍拒绝隐藏路径。文档是带版本与整理时间的人工摘要，只能提供一般规则。
 

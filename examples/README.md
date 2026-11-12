@@ -36,4 +36,4 @@ uv run --locked deepdebug replay \
 ]
 ```
 
-用量字段为可选模拟计数，默认 0。`decision` 也可为原始 JSON 字符串，以演示结构修正；合法决策结构可用 `deepdebug schema decision` 导出。回放输出和轨迹包含输入原文，仅供本地使用；云端接入须先完成脱敏预览与范围确认。
+用量字段为可选模拟计数，默认 0。`decision` 也可为原始 JSON 字符串，以演示结构修正；合法决策结构可用 `deepdebug schema decision` 导出。`--root` 回放输出和轨迹包含输入原文。可按 [脱敏预览与材料确认](../README.md#脱敏预览与材料确认) 生成确认副本，再使用 `--reviewed` 回放；上述四份材料的顺序保持一致。两种入口均仅供本地使用，云端诊断尚未开放。

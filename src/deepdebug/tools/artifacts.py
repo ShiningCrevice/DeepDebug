@@ -72,6 +72,23 @@ class MaterialRegistry:
             item.artifact.model_copy(deep=True), item.text, item.registered_at
         )
 
+    def add_reviewed(self, item: RegisteredMaterial) -> None:
+        """Import an explicitly confirmed copy; this method never reads original files."""
+        artifact = Artifact.model_validate(item.artifact)
+        if (
+            len(self._items) >= 10
+            or artifact.artifact_id != f"A{len(self._items) + 1:03}"
+            or artifact.display_name in self._names
+            or artifact.redaction_status != "reviewed"
+            or artifact.size_bytes != len(item.text.encode("utf-8"))
+            or "\x00" in item.text
+        ):
+            raise MaterialError("已确认材料的结构或内容无效。")
+        self._items[artifact.artifact_id] = RegisteredMaterial(
+            artifact, item.text, item.registered_at
+        )
+        self._names.add(artifact.display_name)
+
     def artifacts(self) -> list[Artifact]:
         return [item.artifact.model_copy(deep=True) for item in self._items.values()]
 

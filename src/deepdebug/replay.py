@@ -13,6 +13,7 @@ from deepdebug.agent.state import Budget, DiagnosisState
 from deepdebug.agent.trace import JsonlTrace
 from deepdebug.llm.client import ModelResponse, ReplayModelClient
 from deepdebug.security.paths import AuthorizedRoot
+from deepdebug.security.review import MaterialReview, reviewed_registry
 from deepdebug.tools.artifacts import MaterialRegistry
 from deepdebug.tools.path_references import PathReferences
 from deepdebug.tools.registry import ToolDispatcher
@@ -23,6 +24,29 @@ class ReplayTurn(Contract):
     decision: dict | str
     input_tokens: Count = 0
     output_tokens: Count = 0
+
+
+def replay_reviewed(
+    review: MaterialReview,
+    model: ReplayModelClient,
+    *,
+    budget: Budget | None = None,
+    trace_stream: TextIO | None = None,
+) -> DiagnosisState:
+    review = MaterialReview.model_validate(review)
+    session = CollectionSession(reviewed_registry(review))
+    session.state = DiagnosisState.model_validate(
+        {
+            **session.state.model_dump(),
+            "budget": budget or Budget(),
+            "material_review_sha256": review.sha256,
+        }
+    )
+    return Controller(
+        ToolDispatcher(session),
+        model,
+        trace=JsonlTrace(trace_stream) if trace_stream is not None else None,
+    ).run(review.content.materials[0].artifact.artifact_id)
 
 
 def load_replay(path: Path) -> ReplayModelClient:

@@ -64,7 +64,7 @@ class AuthorizedRoot:
         os.close(self._fd)
         self._fd = -1
 
-    def read(self, relative: str) -> bytes:
+    def read(self, relative: str, *, max_bytes: int = MAX_FILE_BYTES) -> bytes:
         path = Path(relative)
         if path.is_absolute() or not path.parts or "\\" in relative:
             raise MaterialError("材料必须使用根目录内的相对路径。")
@@ -81,11 +81,19 @@ class AuthorizedRoot:
                 info = os.fstat(stream.fileno())
                 if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
                     raise MaterialError("材料必须是普通文件，且不能使用硬链接。")
-                if info.st_size > MAX_FILE_BYTES:
-                    raise MaterialError("单份材料超过 2 MiB。")
-                data = stream.read(MAX_FILE_BYTES + 1)
-                if len(data) > MAX_FILE_BYTES:
-                    raise MaterialError("单份材料超过 2 MiB。")
+                if info.st_size > max_bytes:
+                    raise MaterialError(
+                        "单份材料超过 2 MiB。"
+                        if max_bytes == MAX_FILE_BYTES
+                        else "文件超过读取大小上限。"
+                    )
+                data = stream.read(max_bytes + 1)
+                if len(data) > max_bytes:
+                    raise MaterialError(
+                        "单份材料超过 2 MiB。"
+                        if max_bytes == MAX_FILE_BYTES
+                        else "文件超过读取大小上限。"
+                    )
                 return data
         except OSError as exc:
             raise MaterialError("材料不存在、不可读取或包含符号链接。") from exc

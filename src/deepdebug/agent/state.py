@@ -49,6 +49,7 @@ class DiagnosisState(Contract):
     schema_version: Literal["1"] = "1"
     session_id: Text
     inputs: list[Artifact] = Field(default_factory=list, max_length=10)
+    material_review_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
     target_environment: TargetEnvironment | None = None
     error_summary: Text | None = None
     evidence: list[Evidence] = Field(default_factory=list)
@@ -61,6 +62,10 @@ class DiagnosisState(Contract):
 
     @model_validator(mode="after")
     def registered_references(self) -> "DiagnosisState":
+        if self.material_review_sha256 is not None and (
+            not self.inputs or any(a.redaction_status != "reviewed" for a in self.inputs)
+        ):
+            raise ValueError("review digest requires reviewed materials")
         artifacts = unique_ids([a.artifact_id for a in self.inputs], "artifact IDs")
         known = unique_ids([e.evidence_id for e in self.evidence], "evidence IDs")
         validate_evidence_references(self.hypotheses, self.tool_history, known)

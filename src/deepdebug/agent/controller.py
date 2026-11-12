@@ -23,9 +23,9 @@ class Controller:
         trace: JsonlTrace | None = None,
         clock: Callable[[], float] = monotonic,
     ):
-        # A remote adapter cannot receive materials until the consent workflow exists.
+        # Remote transport also needs a reviewed request boundary and a provider adapter.
         if model.transport != "offline":
-            raise ValueError("云端模型尚未开放；须先实现脱敏预览与材料范围确认。")
+            raise ValueError("云端模型尚未开放；须完成脱敏材料的发送边界与云端适配。")
         self.dispatcher = dispatcher
         self.session = dispatcher.session
         self.model = model

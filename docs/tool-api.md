@@ -73,13 +73,38 @@
 
 `JsonlTrace(stream).write(event, state, details)` 在写入前重校验完整状态，并逐行 flush。每行含递增 `sequence`、带时区 `recorded_at`、`session_id`、`event`、`details` 和完整 `state`。
 
-事件为 start、model_request、model_response、model_error、invalid_decision、decision、tool、stop。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹，使用固定错误分类。`--trace` 仅新建文件，轨迹原文未经脱敏，不自动删除，不支持恢复执行。
+事件为 start、model_request、model_response、model_error、invalid_decision、decision、tool、stop。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹，使用固定错误分类。`--trace` 仅新建文件，不自动删除，不支持恢复执行。`--root` 的轨迹包含原始材料；`--reviewed` 的材料内容来自脱敏副本，每个状态保留 `material_review_sha256`。
 
 ## 材料登记
 
 `MaterialRegistry.register` 只在用户指定的独立根目录内登记显式相对路径，先校验扩展名、文件类型、2 MiB 实际字节上限与 UTF-8 文本，再分配 `A001…`。`origin=local` 表示本地材料输入，不代表执行了本机探针。最多 10 份材料，记录保持 `pending` 脱敏状态。内容在登记时固定，后续工具按 ID 读取内存副本。
 
 `AuthorizedRoot` 使用 POSIX 目录描述符逐级打开，不跟随符号链接，拒绝硬链接、非普通文件、隐藏路径、`..` 和 `benchmark/gold`。目录描述符可防止已打开根目录被替换为链接后转向其他目录；该边界不覆盖系统级权限攻击。路径检查无法识别用户复制到其他位置的 gold 内容，运行时只应登记授权材料。
+
+## 脱敏预览与确认
+
+`preview_materials(root, log, code, config, snapshots) → MaterialReview`：沿用显式材料登记边界，生成完整脱敏副本。材料顺序为日志、代码、配置、快照；只接受一份日志，第一份快照仍为目标环境。显示名为 `A001.txt` 等 ID 别名，原文件名和替换映射不持久化。常见规则及用户核查步骤见 [README](../README.md#脱敏预览与材料确认)。
+
+`MaterialReview` 字段：
+
+| 字段 | 约束 |
+|---|---|
+| `content.format_version` | 固定为 1 |
+| `content.redaction_version` | 固定为 common-secrets-home-v1 |
+| `content.materials` | 1～10 份有序材料；每份为 artifact、完整 text、带时区 registered_at |
+| `sha256` | content 的规范 JSON（键排序、UTF-8、紧凑分隔符）SHA-256；校验时重新计算 |
+| `status` | preview 或 confirmed |
+| `confirmed_at` | confirmed 必须有带时区时间；preview 必须为空 |
+
+每份实际 UTF-8 内容最多 2 MiB，字节数须与 artifact 一致，禁止 NUL。快照保留采集时间；有效 JSON 字符串在解码后脱敏，保留物理行数，证据 JSON Pointer 指向处理后的字段。预览和确认文件中的 artifact 保持 pending，消费有效确认记录时才导入为 reviewed。
+
+`confirm_materials(review, expected_sha256)`：仅接受摘要匹配的 preview，返回 confirmed 副本。修改文本、材料范围、类型、顺序、时间或规则版本后，旧摘要失效。摘要不是签名；确认仅供本地回放，不授权云端发送。
+
+`save_review(path, review)`：重校验后以 0600 权限新建文件，不覆盖已有路径。`load_review(path)`：复用链接/gold/目录边界，读取外层 JSON 最多 128 MiB，再校验摘要、单份内容和总份数。扩大外层读取上限用于容纳十份输入及 JSON 转义，不改变原始材料 2 MiB 限制。
+
+`reviewed_registry(review)` 只接受 confirmed，建立内容固定且状态为 reviewed 的登记表。`replay_reviewed` 用该表运行原控制器，将确认摘要写入 `DiagnosisState.material_review_sha256`；该字段非空时输入必须全部为 reviewed。材料、证据与工具结果不再从原路径读取。CLI `replay --reviewed FILE` 拒绝同时提供 root/log/code/config/snapshot/path/path-root；预览范围之外的路径观察不开放。
+
+`preview/confirm` 成功输出完整 JSON，退出码 0；输入、确认摘要或输出文件错误返回 2，错误信息不回显材料内容。预览、确认、模型和工具数据都只在本地处理。人工固定响应文件独立提供，不经过材料脱敏。
 
 ## 取证会话
 
