@@ -4,6 +4,7 @@ import re
 from typing import Annotated, Literal
 
 from pydantic import (
+    AfterValidator,
     AwareDatetime,
     BaseModel,
     ConfigDict,
@@ -14,6 +15,8 @@ from pydantic import (
     StringConstraints,
     model_validator,
 )
+
+from deepdebug.security.destination import normalize_endpoint
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Count = Annotated[int, Field(strict=True, ge=0)]
@@ -49,6 +52,16 @@ class Contract(BaseModel):
     """Reject undocumented fields and revalidate model instances at boundaries."""
 
     model_config = ConfigDict(extra="forbid", validate_default=True, revalidate_instances="always")
+
+
+class CloudConsent(Contract):
+    """Explicit runtime permission for one reviewed scope and destination."""
+
+    material_review_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    endpoint: Annotated[str, AfterValidator(normalize_endpoint)]
+    model: Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")]
+    confirmed_at: AwareDatetime
+    scope: Literal["reviewed-evidence-tools-judgments-v1"] = "reviewed-evidence-tools-judgments-v1"
 
 
 def unique_ids(values: list[str], label: str) -> set[str]:

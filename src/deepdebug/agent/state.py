@@ -7,6 +7,7 @@ from pydantic import Field, model_validator
 from deepdebug.agent.actions import Action
 from deepdebug.agent.schemas import (
     Artifact,
+    CloudConsent,
     Contract,
     Count,
     DiagnosisReport,
@@ -36,6 +37,7 @@ class Budget(Contract):
     tool_calls: Count = 0
     report_repairs: Count = 0
     tokens_used: Count = 0
+    usage_complete: bool = True
     elapsed_ms: Count = 0
 
     @model_validator(mode="after")
@@ -50,6 +52,7 @@ class DiagnosisState(Contract):
     session_id: Text
     inputs: list[Artifact] = Field(default_factory=list, max_length=10)
     material_review_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    cloud_consent: CloudConsent | None = None
     target_environment: TargetEnvironment | None = None
     error_summary: Text | None = None
     evidence: list[Evidence] = Field(default_factory=list)
@@ -62,6 +65,10 @@ class DiagnosisState(Contract):
 
     @model_validator(mode="after")
     def registered_references(self) -> "DiagnosisState":
+        if self.cloud_consent is not None and (
+            self.cloud_consent.material_review_sha256 != self.material_review_sha256
+        ):
+            raise ValueError("cloud consent must match the reviewed material scope")
         if self.material_review_sha256 is not None and (
             not self.inputs or any(a.redaction_status != "reviewed" for a in self.inputs)
         ):

@@ -267,7 +267,7 @@ def test_dispatch_refusals_are_real_failed_records(session, name, args, status):
 def test_remote_adapter_rejected_before_materials_are_sent(session):
     model = RecordingModel([finish()])
     model.transport = "remote"
-    with pytest.raises(ValueError, match="脱敏"):
+    with pytest.raises(ValueError, match="已确认"):
         Controller(ToolDispatcher(session), model)
     assert not model.requests
     assert not session.state.tool_history

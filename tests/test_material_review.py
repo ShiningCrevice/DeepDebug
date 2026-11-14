@@ -119,16 +119,14 @@ def test_preview_scope_metadata_and_confirmation(preview, tmp_path):
     assert preview.status == "preview"
     with pytest.raises(MaterialError, match="尚未确认"):
         reviewed_registry(preview)
-    with pytest.raises(ValueError):
-        confirm_materials(preview, "0" * 64)
-    confirmed = confirm_materials(preview, preview.sha256)
+    confirmed = confirm_materials(preview)
     assert confirmed.confirmed_at is not None
     assert confirmed.sha256 == preview.sha256
     registry = reviewed_registry(confirmed)
     assert all(a.redaction_status == "reviewed" for a in registry.artifacts())
     assert all(item.artifact.redaction_status == "pending" for item in preview.content.materials)
     with pytest.raises(ValueError):
-        confirm_materials(confirmed, confirmed.sha256)
+        confirm_materials(confirmed)
 
 
 @pytest.mark.parametrize("change", ["text", "remove", "order", "type", "status", "time"])
@@ -153,7 +151,7 @@ def test_changed_preview_cannot_reuse_confirmation(preview, change):
 def test_boundaries_revalidate_mutated_models(preview, tmp_path):
     preview.content.materials[0].text += "changed"
     for operation in (
-        lambda: confirm_materials(preview, preview.sha256),
+        lambda: confirm_materials(preview),
         lambda: save_review(tmp_path / "out.json", preview),
         lambda: reviewed_registry(preview),
     ):
@@ -201,7 +199,7 @@ def test_review_keeps_input_count_and_size_limits(tmp_path):
 
 
 def test_reviewed_replay_uses_frozen_content_in_requests_report_and_trace(preview, tmp_path):
-    confirmed = confirm_materials(preview, preview.sha256)
+    confirmed = confirm_materials(preview)
     (tmp_path / "private-name.log").write_text("RuntimeError: CHANGED_AFTER_PREVIEW")
     (tmp_path / "config.json").unlink()
     decisions = [
@@ -264,7 +262,7 @@ def test_real_development_replay_and_snapshot_field_evidence():
         ["launch.json"],
         ["target_snapshot.json", "project_snapshot.json"],
     )
-    confirmed = confirm_materials(preview, preview.sha256)
+    confirmed = confirm_materials(preview)
     state = replay_reviewed(confirmed, load_replay(ROOT / "examples/dep_002_replay.json"))
     assert state.stop_reason == "completed"
     assert state.target_environment.environment_id == "ENV_EMPTY"
@@ -280,8 +278,8 @@ def test_real_development_replay_and_snapshot_field_evidence():
 def test_remote_still_rejected_after_confirmation(preview):
     model = ReplayModelClient([])
     model.transport = "remote"
-    session = CollectionSession(reviewed_registry(confirm_materials(preview, preview.sha256)))
-    with pytest.raises(ValueError, match="云端模型尚未开放"):
+    session = CollectionSession(reviewed_registry(confirm_materials(preview)))
+    with pytest.raises(ValueError, match="云端模型需要已确认"):
         Controller(ToolDispatcher(session), model)
 
 
@@ -312,10 +310,10 @@ def test_cli_preview_confirm_replay(preview, tmp_path, capsys):
     data = json.loads(captured.out)
     assert "自动脱敏可能遗漏" in captured.err
     reviewed = tmp_path / "reviewed.json"
-    assert (
-        main(["confirm", "--preview", str(output), "--sha256", "0" * 64, "--output", str(reviewed)])
-        == 2
-    )
+    changed = {**data, "sha256": "0" * 64}
+    output.write_text(json.dumps(changed))
+    assert main(["confirm", "--preview", str(output), "--output", str(reviewed)]) == 2
+    output.write_text(json.dumps(data))
     assert not reviewed.exists()
     capsys.readouterr()
     assert (
@@ -324,15 +322,15 @@ def test_cli_preview_confirm_replay(preview, tmp_path, capsys):
                 "confirm",
                 "--preview",
                 str(output),
-                "--sha256",
-                data["sha256"],
                 "--output",
                 str(reviewed),
             ]
         )
         == 0
     )
-    capsys.readouterr()
+    confirmed_output = capsys.readouterr()
+    assert "材料范围" in confirmed_output.err
+    assert "A001.log" in confirmed_output.err
     responses = ROOT / "examples/dep_002_replay.json"
     assert (
         main(
@@ -367,8 +365,6 @@ def test_invalid_preview_cli_does_not_echo_sensitive_content(tmp_path, capsys):
                 "confirm",
                 "--preview",
                 str(output),
-                "--sha256",
-                "0" * 64,
                 "--output",
                 str(tmp_path / "confirmed.json"),
             ]

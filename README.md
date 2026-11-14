@@ -2,7 +2,7 @@
 
 面向 PyTorch 训练与推理故障的诊断助手。目标是根据日志、代码、配置和环境快照，按需补充证据，输出可追溯的候选根因、修复建议和验证方法。
 
-**当前状态：已完成 Step 12（脱敏预览与材料范围确认）。** 支持常见敏感内容脱敏、按内容摘要确认材料，以及使用已确认副本运行离线控制循环；已有环境快照采集、CLI 取证、BM25 检索、预算停止、JSON 报告与 JSONL 轨迹。云端自动诊断尚未开放；回放用于验证控制流程，不代表模型诊断效果。
+**当前状态：已完成 Step 13（云端发送边界与模型适配）。** `diagnose` 支持通过 `--base-url` 或 `OPENAI_BASE_URL` 选择兼容 OpenAI Responses 协议的服务，外发确认绑定最终请求地址和模型。已有逐轮范围校验、请求/响应脱敏、用量记账、超时取消、JSON 报告及 JSONL 轨迹；HTTP 模拟集成测试通过；gpt-4.1-mini 与 gpt-6-luna 在线流程已跑通；luna 能识别 dep_002 的环境差异，但仍遗漏配置取证，诊断验收未通过（见 [进度记录](docs/progress.md)）。
 
 ## 文档导航
 
@@ -17,7 +17,7 @@
 
 ## 环境与启动
 
-需要 Python 3.10+ 和 uv。本仓库默认开发解释器为 Python 3.12（`.python-version`）；当前实际验证环境为 Linux / Python 3.12。无需 GPU、PyTorch 或 API key。
+需要 Python 3.10+ 和 uv。本仓库默认开发解释器为 Python 3.12（`.python-version`）；当前实际验证环境为 Linux / Python 3.12。本地取证与回放无需 GPU、PyTorch 或 API key；云端诊断需要 `OPENAI_API_KEY`。
 
 ```bash
 uv sync --locked
@@ -27,7 +27,7 @@ uv run --locked python -m deepdebug
 uv run --locked deepdebug schema action
 ```
 
-`uv sync` 创建项目内 `.venv`，安装项目与开发依赖；首次安装需要可用的包源。若使用其他兼容解释器，可执行 `uv sync --locked --python 3.10`。依赖精确版本保存在 `uv.lock`。当前不读取 `.env`，`.env.example` 仅说明后续配置位置。
+`uv sync` 创建项目内 `.venv`，安装项目与开发依赖；首次安装需要可用的包源。若使用其他兼容解释器，可执行 `uv sync --locked --python 3.10`。依赖精确版本保存在 `uv.lock`。程序不读取 `.env`；云端密钥仅从环境变量读取，变量说明见 `.env.example`。
 
 ## 开发检查
 
@@ -38,7 +38,7 @@ uv run --locked pytest
 uv build
 ```
 
-测试覆盖 CLI、协议与证据引用、路径边界、探针隔离与降级、文档检索，以及固定响应控制循环的权限、缓存、预算、停止、错误修正和轨迹。真实模型诊断效果待云端接入后评测。
+测试覆盖 CLI、协议与证据引用、路径边界、探针隔离与降级、文档检索、控制循环，以及 HTTP 模拟下的外发授权、凭据保护、用量和超时取消。测试不调用付费 API；真实模型诊断效果待评测。
 
 ## 脱敏预览与材料确认
 
@@ -55,12 +55,11 @@ uv run --locked deepdebug preview \
 
 自动脱敏会遗漏非标准格式、私有业务内容及其他目录路径；请逐项核查。需要补充脱敏或缩小材料范围时，修改本地材料副本或调整参数，再生成新预览。预览和确认文件仅新建，权限为 `0600`，父目录须已存在；JSON 同时输出到标准输出。不要将未核查的预览视为可公开材料。
 
-核查完成后，把预览顶层的 `sha256` 填入下面命令：
+核查全部材料内容和范围后执行 `confirm`，该命令表示确认已完成核查：
 
 ```bash
 uv run --locked deepdebug confirm \
   --preview runs/dep_002-preview.json \
-  --sha256 '核查后的预览sha256' \
   --output runs/dep_002-reviewed.json
 
 uv run --locked deepdebug replay \
@@ -69,9 +68,41 @@ uv run --locked deepdebug replay \
   --trace runs/dep_002-reviewed-trace.jsonl
 ```
 
-`confirm` 将全部预览材料作为本地回放范围，绑定脱敏内容、类型、顺序和登记时间。内容变化或摘要不符会拒绝确认。已确认回放只读取这份固定副本，原文件后续修改不会改变证据；状态材料标记为 `reviewed`，并以 `material_review_sha256` 关联确认记录。证据、JSON 报告和轨迹中的材料内容均来自该副本，行号和 JSON Pointer 指向预览内容。
+`confirm` 将全部预览材料作为本地回放范围，绑定脱敏内容、类型、顺序和登记时间。程序自动校验文件中的摘要；内容与摘要不符会拒绝确认。运行时在标准错误输出列出材料名称、类型和大小，无需复制摘要。已确认回放只读取这份固定副本，原文件后续修改不会改变证据；状态材料标记为 `reviewed`，并以 `material_review_sha256` 关联确认记录。证据、JSON 报告和轨迹中的材料内容均来自该副本，行号和 JSON Pointer 指向预览内容。
 
-`--reviewed` 与原始材料参数及 `--path/--path-root` 互斥；本机路径观察尚未纳入预览范围。确认记录用于本地内容一致性检查，不是数字签名或云端发送授权；控制器仍拒绝 remote 客户端。`preview/confirm` 成功返回 `0`，输入、摘要或输出错误返回 `2`。固定响应文件是另外提供的人工演示文本，不经过材料脱敏；示例不计为模型诊断效果。
+`--reviewed` 与原始材料参数及 `--path/--path-root` 互斥；本机路径观察尚未纳入预览范围。确认记录用于本地内容一致性检查，不是数字签名；`confirm` 本身不授权外发，云端诊断还需执行下述授权命令。`preview/confirm` 成功返回 `0`，输入、摘要或输出错误返回 `2`。固定响应文件是另外提供的人工演示文本，不经过材料脱敏；示例不计为模型诊断效果。
+
+## 云端诊断
+
+先完成 `preview → 人工核查 → confirm`，并配置 `OPENAI_API_KEY`。在项目根目录将 `.env.example` 复制为 `.env`，填写密钥与 `OPENAI_BASE_URL`；从该目录运行 `diagnose` 时自动加载。已有环境变量优先于文件，`.env` 已被 Git 忽略。以下命令明确授权：把已确认材料中按工具选取的片段、工具结果、文档摘要和模型判断发送至所选服务。默认服务为 OpenAI；替换模型占位符后运行，模型须支持 Responses API 的 JSON mode，账户须有访问权限。
+
+```bash
+uv run --locked deepdebug diagnose \
+  --reviewed runs/dep_002-reviewed.json \
+  --send-to https://api.openai.com/v1/responses \
+  --model '你的模型ID' \
+  --trace runs/dep_002-cloud-trace.jsonl
+```
+
+执行 `diagnose --reviewed ... --send-to ... --model ...` 表示同意发送该确认副本；程序列出材料清单、目的地和模型，自动将副本摘要绑定到发送记录。命令仅消费确认副本，不接受追加原始材料或本机路径。每轮发送前校验登记内容、摘要、目的地、模型和当前会话，再对实际请求中的文本做常见规则脱敏。完整源文件不直接附加到请求，工具按需选取片段；模型输出也在进入状态和轨迹前脱敏。自动规则的覆盖限制仍适用，应在预览时核查全部材料。
+
+自定义服务示例：
+
+```bash
+uv run --locked deepdebug diagnose \
+  --reviewed runs/dep_002-reviewed.json \
+  --base-url https://gateway.example/api/v1 \
+  --send-to https://gateway.example/api/v1/responses \
+  --model '你的模型ID'
+```
+
+地址优先级为 `--base-url` → `OPENAI_BASE_URL` → `https://api.openai.com/v1`。基础地址包含服务要求的版本/网关前缀，程序去掉尾斜杠后追加 `/responses`，不自动添加 `/v1`；基础地址不能已经包含末尾 `/responses`。`--send-to` 必须匹配最终地址，协议、主机、端口或路径不符会在发送前拒绝。状态与轨迹保存规范化后的完整地址。
+
+支持 HTTPS 和 HTTP（例如 `http://localhost:8000/v1`）；HTTP 会明文传输凭据和材料。地址不能包含用户名密码、查询参数、片段或空白，密钥继续通过 `OPENAI_API_KEY` 提供。程序不跟随重定向，不读取代理环境变量。自定义服务须支持现有 Responses 请求字段与响应结构；仅实现 Chat Completions 的服务暂不适用。请求设置 `store=false`，该设置不等于供应商的零保留承诺。请求格式依据 [OpenAI Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create)；JSON mode 由本地 Pydantic 继续检查动作结构和证据引用。
+
+默认预算与回放相同，可通过 `--max-decisions/--max-tools/--max-seconds` 调整。每次输出上限最多 4,096 token，输入按请求 UTF-8 字节数加 1,024 的余量保守估算；余量不足时以 `budget_exhausted` 停止，不裁掉证据后继续发送。用量取 API 返回的 `input_tokens/output_tokens`，拒答与截断也记账。网络异常或无有效用量时 `budget.usage_complete=false`，此时 `tokens_used` 只包含已知用量，不能作为完整账单或硬性费用上限。超时取消本机等待，服务端是否已生成或计费无法据此确定。
+
+输出为完整状态 JSON，含 `cloud_consent`（摘要、目的地、模型、确认时间）和报告。报告修复验证仍为“未执行”。`--trace` 仅新建 JSONL 文件；退出码 `0` 表示完成、缺信息或无进展，`1` 表示预算/模型/动作/工具异常停止，`2` 表示启动参数、材料、密钥或输出路径错误。具体原因见 `stop_reason` 和轨迹。当前已通过固定 HTTP 响应验证，真实模型五类端到端诊断尚未验收。
 
 ## 离线控制循环回放
 
@@ -89,7 +120,7 @@ uv run --locked deepdebug replay \
 
 `--trace` 可选，逐行写入决策、工具调用、缓存命中、错误及停止时的完整状态；仅新建文件，重复运行需换一个文件名。以上 `--root` 模式的状态与轨迹保留未脱敏的原始材料片段、路径及环境信息，仅供本地检查；当前无自动清理。响应格式见 [示例说明](examples/README.md)，决策 Schema 可用 `deepdebug schema decision` 导出。
 
-默认最多 6 次决策、8 次工具调用、120 秒；可用 `--max-decisions`、`--max-tools`、`--max-seconds` 调整。首轮日志解析计入工具预算。同名同参调用复用结果和证据；连续两轮没有新证据或假设变化时停止。无效决策最多修正一次，瞬时模型接口失败最多重试一次，均计入决策预算。Token 用量由回放文件提供模拟值，默认 0；真实供应商用量与请求超时尚未验证。
+默认最多 6 次决策、8 次工具调用、120 秒；可用 `--max-decisions`、`--max-tools`、`--max-seconds` 调整。首轮日志解析计入工具预算。同名同参调用复用结果和证据；连续两轮没有新证据或假设变化时停止。无效决策最多修正一次，瞬时模型接口失败最多重试一次，均计入决策预算。回放 token 用量由响应文件提供模拟值，默认 0。
 
 回放沿用 `--code`、`--config`、`--snapshot`、`--path` 与 `--path-root` 的显式登记边界。第一份快照为目标，环境 ID 必须唯一；模型只能读取选定探针对应的快照字段。退出码：`0` 表示完成、请求补充信息或无进展停止；`1` 表示预算、模型接口、无效动作或工具不可用导致停止；`2` 表示输入或输出文件错误。具体原因以状态的 `stop_reason` 和工具历史为准。
 
@@ -197,12 +228,12 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 | `benchmark/`、`scripts/` | 六个开发案例、人工参考状态、开发案例与用户环境采集脚本 |
 | `examples/` | 人工固定响应与回放演示说明 |
 
-JSON 报告由控制器组装并校验，Markdown 渲染待实现。Streamlit 和模型 SDK 在对应阶段引入；当前 BM25 检索使用标准库。
+JSON 报告由控制器组装并校验，Markdown 渲染和 Streamlit 待实现。云端适配使用 HTTPX；BM25 检索使用标准库。
 
 ## 范围与边界
 
 首版聚焦 OOM、设备不一致、依赖/解释器、路径和配置/形状五类问题。采用单 Agent 状态机，默认导入环境快照；本机采集需要用户明确选择。模型不得执行任意代码或 shell、安装依赖、修改用户文件或重跑真实训练。上传材料和检索文档均是不可信数据。
 
-当前已实现材料与路径边界、大小检查、固定环境探针的超时和输出限制、固定语料检索，以及离线控制器的动作调度和预算停止。脱敏预览与材料确认已接通离线回放，云端发送边界、模型适配及证据语义评测待实现。`collect` 中的调用次数和耗时仅作记录，`replay` 执行停止判断；同步本地工具在返回后检查总时限，不提供抢占式中断。内置验证只针对开发者维护的预置案例，不能等同于真实训练恢复。`runs/`、`sessions/` 已被 Git 忽略，会话自动保存与清理待实现。不得提交真实密钥和私有日志。
+当前已实现材料与路径边界、大小检查、固定环境探针的超时和输出限制、固定语料检索，以及控制器的动作调度和预算停止。脱敏确认支持离线回放与显式授权后的云端请求，证据语义和真实诊断效果待评测。`collect` 中的调用次数和耗时仅作记录，`replay/diagnose` 执行停止判断；同步本地工具在返回后检查总时限，不提供抢占式中断。内置验证只针对开发者维护的预置案例，不能等同于真实训练恢复。`runs/`、`sessions/` 已被 Git 忽略，会话自动保存与清理待实现。不得提交真实密钥和私有日志。
 
-下一步：实现云端请求的脱敏与范围校验边界、ModelClient 适配及真实用量/超时处理，完成五类真实模型端到端诊断。
+下一步：配置实际模型并核查、授权开发案例材料，完成五类真实模型端到端诊断与至少一例工具反馈改变假设的验收。

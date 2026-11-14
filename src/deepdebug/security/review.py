@@ -100,10 +100,10 @@ def preview_materials(
     return MaterialReview(content=content, sha256=content.digest())
 
 
-def confirm_materials(review: MaterialReview, expected_sha256: str) -> MaterialReview:
+def confirm_materials(review: MaterialReview) -> MaterialReview:
     review = MaterialReview.model_validate(review)
-    if review.status != "preview" or expected_sha256 != review.sha256:
-        raise ValueError("confirmation must match the inspected preview")
+    if review.status != "preview":
+        raise ValueError("confirmation requires a preview")
     return MaterialReview(
         content=review.content,
         sha256=review.sha256,

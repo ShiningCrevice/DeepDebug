@@ -11,6 +11,7 @@ from deepdebug.agent.schemas import DiagnosisReport, Verification
 from deepdebug.agent.state import DiagnosisState
 from deepdebug.agent.trace import JsonlTrace
 from deepdebug.llm.client import ModelClient, ModelFailure, ModelRequest, ModelResponse
+from deepdebug.llm.openai import OpenAIResponsesClient
 from deepdebug.tools.registry import ToolDispatcher
 
 
@@ -23,9 +24,10 @@ class Controller:
         trace: JsonlTrace | None = None,
         clock: Callable[[], float] = monotonic,
     ):
-        # Remote transport also needs a reviewed request boundary and a provider adapter.
         if model.transport != "offline":
-            raise ValueError("云端模型尚未开放；须完成脱敏材料的发送边界与云端适配。")
+            if not isinstance(model, OpenAIResponsesClient):
+                raise ValueError("云端模型需要已确认的发送边界与内置适配器。")
+            model.boundary.validate_dispatcher(dispatcher)
         self.dispatcher = dispatcher
         self.session = dispatcher.session
         self.model = model
@@ -112,7 +114,7 @@ class Controller:
         DiagnosisState.model_validate(self.state)
         if self.state.stop_reason is not None or self.state.tool_history:
             raise ValueError("控制器需要新登记的会话；续跑尚未实现。")
-        self._event("start", mode="offline")
+        self._event("start", mode=self.model.transport)
         if self._exhausted():
             return self._stop("budget_exhausted", questions=["资源预算不足，尚未完成取证。"])
         initial = ParseLogAction(
@@ -171,7 +173,13 @@ class Controller:
                 self._event("model_error", kind="invalid_response")
                 return self._stop("model_error", questions=["模型接口返回了无效响应或用量字段。"])
             except ModelFailure as exc:
-                self._event("model_error", kind=exc.kind)
+                if exc.usage_unknown:
+                    budget = self.state.budget.model_dump()
+                    budget["usage_complete"] = False
+                    self._update(budget=budget)
+                self._event("model_error", kind=exc.kind, usage_unknown=exc.usage_unknown)
+                if exc.kind == "budget":
+                    return self._stop("budget_exhausted", questions=["剩余请求额度不足。"])
                 if self._exhausted():
                     return self._stop("budget_exhausted", questions=["模型请求期间预算耗尽。"])
                 if exc.kind in {"timeout", "unavailable"} and not retried:
@@ -188,6 +196,9 @@ class Controller:
             )
             if self._exhausted(calls=False):
                 return self._stop("budget_exhausted", questions=["模型响应到达时预算已耗尽。"])
+            if response.failure is not None:
+                self._event("model_error", kind=response.failure)
+                return self._stop("model_error", questions=["模型未返回完整诊断决策。"])
             try:
                 decision = Decision.model_validate_json(response.content)
                 candidate = DiagnosisState.model_validate(

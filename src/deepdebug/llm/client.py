@@ -1,4 +1,4 @@
-"""Provider-independent requests; the only shipped client replays local responses."""
+"""Provider-independent model requests, usage and classified failures."""
 
 from collections.abc import Iterable
 from typing import Literal, Protocol
@@ -24,6 +24,7 @@ class ModelResponse(Contract):
     content: str
     input_tokens: Count = 0
     output_tokens: Count = 0
+    failure: Literal["refused", "incomplete", "error"] | None = None
 
     @property
     def tokens_used(self) -> int:
@@ -33,8 +34,14 @@ class ModelResponse(Contract):
 class ModelFailure(Exception):
     """Adapters report transport failures without exposing provider exception text."""
 
-    def __init__(self, kind: Literal["timeout", "unavailable", "error"]):
+    def __init__(
+        self,
+        kind: Literal["timeout", "unavailable", "error", "budget"],
+        *,
+        usage_unknown: bool = False,
+    ):
         self.kind = kind
+        self.usage_unknown = usage_unknown
         super().__init__(kind)
 
 

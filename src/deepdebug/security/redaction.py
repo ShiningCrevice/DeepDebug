@@ -46,9 +46,11 @@ class Redactor:
     The original-to-alias map lives only in memory and is never serialized.
     """
 
-    def __init__(self, texts: Iterable[str]):
+    def __init__(self, texts: Iterable[str], *, secrets: Iterable[str] = ()):
         self._replacements: dict[str, str] = {}
         self._counts: dict[str, int] = {}
+        for secret in secrets:
+            self._add(secret, "SECRET")
         texts = list(texts)
         for text in texts:
             self._learn(text)
@@ -64,7 +66,11 @@ class Redactor:
         )
 
     def _add(self, value: str, kind: str) -> None:
-        if not value or value in self._replacements:
+        if (
+            not value
+            or value in self._replacements
+            or re.fullmatch(r"\[REDACTED_SECRET(?:_\d{3})?\]", value)
+        ):
             return
         self._counts[kind] = self._counts.get(kind, 0) + 1
         number = self._counts[kind]

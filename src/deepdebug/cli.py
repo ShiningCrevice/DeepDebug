@@ -2,21 +2,28 @@
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 from contextlib import nullcontext
+from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
 from typing import get_args
 
+from dotenv import load_dotenv
+
 from deepdebug.agent.actions import ACTION_ADAPTER
 from deepdebug.agent.decision import Decision
-from deepdebug.agent.schemas import Category, DiagnosisReport, EnvironmentSnapshot
+from deepdebug.agent.schemas import Category, CloudConsent, DiagnosisReport, EnvironmentSnapshot
 from deepdebug.agent.state import Budget, DiagnosisState
 from deepdebug.collection import collect, search_documents
+from deepdebug.diagnosis import diagnose
 from deepdebug.replay import load_replay, replay, replay_reviewed
+from deepdebug.security.destination import DEFAULT_BASE_URL, responses_endpoint
 from deepdebug.security.paths import MaterialError
 from deepdebug.security.review import (
+    MaterialReview,
     confirm_materials,
     load_review,
     preview_materials,
@@ -25,12 +32,22 @@ from deepdebug.security.review import (
 from deepdebug.tools.capture import CaptureError, capture_environment
 
 
+def _show_materials(review: MaterialReview) -> None:
+    print("材料范围：", file=sys.stderr)
+    for item in review.content.materials:
+        artifact = item.artifact
+        print(
+            f"  {artifact.display_name} ({artifact.kind}, {artifact.size_bytes} bytes)",
+            file=sys.stderr,
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Parse commands and emit local JSON, including offline model-response replay."""
     parser = argparse.ArgumentParser(
         prog="deepdebug",
         description="DeepDebug：面向 PyTorch 故障的证据驱动诊断助手。",
-        epilog="支持本地取证、脱敏预览和固定模型响应回放；云端诊断尚未开放。",
+        epilog="支持本地取证、脱敏确认、离线回放，以及显式授权后的云端诊断。",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {version('deepdebug-agent')}"
@@ -45,10 +62,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     preview.add_argument("--config", action="append", default=[])
     preview.add_argument("--snapshot", action="append", default=[])
     preview.add_argument("--output", type=Path, required=True, help="新建本地预览文件")
-    confirm = commands.add_parser("confirm", help="按已核查的 SHA-256 确认全部预览材料")
+    confirm = commands.add_parser("confirm", help="确认已核查全部预览材料，保存确认副本")
     confirm.add_argument("--preview", type=Path, required=True)
-    confirm.add_argument("--sha256", required=True, help="核查预览内容后填写其 sha256")
     confirm.add_argument("--output", type=Path, required=True, help="新建已确认材料文件")
+    diagnosis = commands.add_parser("diagnose", help="授权已核查材料发送至指定模型并诊断")
+    diagnosis.add_argument("--reviewed", type=Path, required=True)
+    diagnosis.add_argument("--model", required=True, help="支持 Responses JSON mode 的模型 ID")
+    diagnosis.add_argument(
+        "--base-url",
+        help="API 基础地址（含版本前缀）；优先于 OPENAI_BASE_URL，默认 https://api.openai.com/v1",
+    )
+    diagnosis.add_argument(
+        "--send-to",
+        required=True,
+        help="确认材料片段、工具结果及判断发送至此完整地址；须匹配 base_url + /responses",
+    )
+    diagnosis.add_argument("--trace", type=Path)
+    diagnosis.add_argument("--max-decisions", type=int, default=6)
+    diagnosis.add_argument("--max-tools", type=int, default=8)
+    diagnosis.add_argument("--max-seconds", type=int, default=120)
     replay_parser = commands.add_parser("replay", help="离线回放固定模型响应，输出状态与 JSON 报告")
     replay_source = replay_parser.add_mutually_exclusive_group(required=True)
     replay_source.add_argument("--root", type=Path, help="独立材料目录")
@@ -95,7 +127,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.root, args.log, args.code, args.config, args.snapshot
                 )
             else:
-                review = confirm_materials(load_review(args.preview), args.sha256)
+                review = confirm_materials(load_review(args.preview))
+                _show_materials(review)
             save_review(args.output, review)
         except (OSError, ValueError, RecursionError):
             print(
@@ -107,10 +140,48 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "preview":
             print(
                 "请核查全部 text 及材料范围；自动脱敏可能遗漏。"
-                "确认仅供本地回放，云端发送尚未开放。",
+                "confirm 仅确认本地副本；diagnose 需另行指定外发目的地和模型。",
                 file=sys.stderr,
             )
         return 0
+    if args.command == "diagnose":
+        try:
+            load_dotenv(Path.cwd() / ".env", override=False)
+            review = load_review(args.reviewed)
+            consent = CloudConsent(
+                material_review_sha256=review.sha256,
+                endpoint=args.send_to,
+                model=args.model,
+                confirmed_at=datetime.now(timezone.utc),
+            )
+            base_url = (
+                args.base_url
+                if args.base_url is not None
+                else os.environ.get("OPENAI_BASE_URL", DEFAULT_BASE_URL)
+            )
+            if consent.endpoint != responses_endpoint(base_url):
+                print("--send-to 必须与 base_url 后追加 /responses 的地址一致。", file=sys.stderr)
+                return 2
+            _show_materials(review)
+            print(f"发送至：{consent.endpoint}；模型：{consent.model}", file=sys.stderr)
+            budget = Budget(
+                max_decision_calls=args.max_decisions,
+                max_tool_calls=args.max_tools,
+                max_duration_seconds=args.max_seconds,
+            )
+            trace_context = (
+                args.trace.open("x", encoding="utf-8") if args.trace else nullcontext(None)
+            )
+            with trace_context as stream:
+                state = diagnose(review, consent, budget=budget, trace_stream=stream)
+        except (OSError, ValueError, MaterialError):
+            print(
+                "诊断启动失败：检查材料、摘要、base_url、--send-to、模型、密钥、预算与轨迹路径。",
+                file=sys.stderr,
+            )
+            return 2
+        print(state.model_dump_json(indent=2))
+        return 0 if state.stop_reason in {"completed", "need_info", "no_progress"} else 1
     if args.command == "replay":
         if args.root and not args.log:
             parser.error("--root 需要 --log。")

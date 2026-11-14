@@ -6,15 +6,16 @@
 
 采用 Python 3.10+、`src/deepdebug` 包布局和 uv，默认开发解释器为 Python 3.12。`pyproject.toml` 管理版本与依赖声明，`uv.lock` 锁定依赖；CLI 从安装元数据获取版本，避免重复维护版本号。
 
-标准库 argparse 负责命令行交互，`deepdebug` 与 `python -m deepdebug` 共享 `main()`。Pydantic v2 负责数据协议和边界校验，pytest 与 Ruff 分别用于测试和静态检查。BM25 使用标准库实现；Streamlit 和模型 SDK 随对应功能引入。普通快照取证无需安装 PyTorch、GPU 驱动或配置模型密钥。独立的 `capture` 开发依赖组包含固定版本 PyTorch 2.9.1 与 NumPy，用于真实故障采集；Linux/Windows 的 torch 来自显式 CUDA 12.8 官方索引，其他包仍用默认包源。
+标准库 argparse 负责命令行交互，`deepdebug` 与 `python -m deepdebug` 共享 `main()`。Pydantic v2 负责数据协议和边界校验，pytest 与 Ruff 分别用于测试和静态检查。BM25 使用标准库实现；HTTPX 负责模型 HTTP 访问，Streamlit 待引入。普通快照取证无需安装 PyTorch、GPU 驱动或配置模型密钥。独立的 `capture` 开发依赖组包含固定版本 PyTorch 2.9.1 与 NumPy，用于真实故障采集；Linux/Windows 的 torch 来自显式 CUDA 12.8 官方索引，其他包仍用默认包源。
 
 ## 当前数据流与模块职责
 
-当前入口提供材料预览/确认、离线控制循环、宿主取证、环境采集和独立文档检索：
+当前入口提供材料预览/确认、云端诊断、离线控制循环、宿主取证、环境采集和独立文档检索：
 
 ```text
 preview → 显式材料登记 → 常见规则脱敏 → 含完整文本和摘要的预览
 confirm → 预览与摘要校验 → 固定确认副本 → replay --reviewed
+diagnose → 固定确认副本 + 外发目的地/模型/摘要授权 → 请求边界 → 云端模型 ↔ 受限工具
 replay      → 材料登记 → 固定日志解析 → 模型响应回放 ↔ 受限工具 → JSON 报告 / JSONL 轨迹
 collect     → 材料登记 → 日志解析 → 代码/配置读取 → 快照及可选 GPU 查询
             → 可选路径检查 → 可选文档检索 → DiagnosisState JSON
@@ -26,6 +27,7 @@ search-docs → 固定语料检索 → 文档证据与工具记录 → Diagnosis
 |---|---|
 | `cli.py`、`__main__.py` | 参数、输出和退出码 |
 | `replay.py`、`llm/client.py` | 离线回放、模型请求/响应契约与固定响应客户端 |
+| `diagnosis.py`、`llm/openai.py`、`security/outbound.py` | 已授权云端会话、Responses HTTP 适配、逐轮范围校验与请求脱敏 |
 | `agent/controller.py`、`decision.py`、`trace.py` | 决策校验、循环、预算、停止报告与 JSONL 检查点 |
 | `tools/registry.py` | 环境/路径 ID 绑定、白名单调度与会话缓存 |
 | `collection.py` | 组织固定取证流程和独立检索 |
@@ -35,8 +37,9 @@ search-docs → 固定语料检索 → 文档证据与工具记录 → Diagnosis
 | `agent/evidence.py` | 会话内证据编号与去重 |
 | `security/paths.py` | 授权目录、受限读取与路径检查 |
 | `security/redaction.py`、`review.py` | 跨材料一致替换、预览协议、摘要确认及固定副本加载 |
+| `security/destination.py` | API 基础地址解析、Responses 目的地拼接和规范化校验 |
 
-CLI 只负责交互，流程组织与工具实现分别维护。工具返回事实；离线控制器接受固定模型响应中的假设与动作，执行真实工具并将观察送入下一轮请求。真实模型自动诊断待云端接入后验证。
+CLI 只负责交互，流程组织与工具实现分别维护。工具返回事实；控制器接受模型响应中的假设与动作，执行真实工具并将观察送入下一轮请求。离线响应和 HTTP 模拟已用于测试，真实模型自动诊断待验证。
 
 ## 材料边界与内容固定
 
@@ -52,7 +55,9 @@ CLI 只负责交互，流程组织与工具实现分别维护。工具返回事�
 
 `replay --reviewed` 将确认副本装入独立材料登记表，状态材料标记为 reviewed，并记录 `material_review_sha256`。工具、证据、模型请求中的材料和轨迹都从该表生成；原文件修改、删除不改变当前运行。证据位置指向脱敏副本。已确认回放不接受追加原始材料或本机路径，因为这些观察尚未进入确认范围。
 
-摘要用于本地内容一致性检查，不承担签名、用户身份认证或云端授权。后续云端适配还需要对实际发送的状态、工具结果和模型生成文本实施请求边界检查，并明确目的地和材料外发确认。当前 remote 客户端仍被拒绝。
+摘要用于本地内容一致性检查，不承担签名或用户身份认证。`confirm` 命令表示已核查副本，`diagnose --send-to` 表示同意外发；两者显示材料清单，诊断还显示目的地和模型。程序自动校验副本摘要，并将它与目的地、模型共同写入 `CloudConsent`，随状态和轨迹保存。本地单用户可编辑文件，确认记录不作为跨用户的安全凭据。
+
+`OutboundBoundary` 绑定确认副本和当前 `ToolDispatcher`，每轮比较登记文本、元数据、会话状态、证据登记表和可用环境，拒绝额外材料及本机路径。云端客户端只能配合这个 dispatcher 使用。发送内容取当前工具已观察到的片段和判断，完整源文件不附加到请求；对序列化请求中的文本再次脱敏，API key 作为额外已知敏感值屏蔽。预览占位符在重复脱敏时保持稳定；模型返回文本在进入状态与轨迹前执行同一规则。原始证据仍指向确认副本，再次脱敏只改变外发副本。
 
 ## 协议、状态与证据
 
@@ -96,9 +101,15 @@ GPU 查询保留快照采样时间；路径检查标记为运行命令主机的 
 
 `ToolDispatcher` 使用显式分支调用现有工具，不接受方法名或命令执行。环境 ID 由已登记快照解析，重复 ID 不提供绑定；比较快照不会替换第一份目标快照，GPU 查询也不更换目标。探针选择只影响返回字段和证据；`run_builtin_check` 返回 `unavailable`。缓存按工具名和完整参数保存，包括失败结果；命中复用原调用 ID，在轨迹中记录本次动作，不重复增加工具计数。路径缓存表示首次检查时刻。
 
-预算在每轮决策前、模型返回后及工具边界检查。无效决策可修正一次；模型接口的 timeout/unavailable 在会话内可重试一次，两者均计入决策次数。连续两轮没有新证据或假设变化则停止；仅观察摘要变化不算进展。模型接口错误、无效动作、预算耗尽和缺信息均保留已有证据，并由宿主生成 JSON 停止报告。同步本地工具在返回后检查总时限；单次工具抢占和真实网络超时留给后续执行器/适配器落实。
+预算在每轮决策前、模型返回后及工具边界检查。无效决策可修正一次；模型接口的 timeout/unavailable 在会话内可重试一次，两者均计入决策次数。连续两轮没有新证据或假设变化则停止；仅观察摘要变化不算进展。模型接口错误、无效动作、预算耗尽和缺信息均保留已有证据，并由宿主生成 JSON 停止报告。同步本地工具在返回后检查总时限；模型 HTTP 请求由异步截止时间取消等待。
 
-当前唯一客户端是 `ReplayModelClient`，响应由人工 JSON 文件提供，token 为文件声明的模拟用量。控制器拒绝 remote 客户端；`--root` 使用原文，`--reviewed` 使用确认的脱敏副本，状态和轨迹仅供本地使用。`examples/dep_002_replay.json` 演示配置与快照使候选原因从缺包细化到解释器不一致；固定答案只用于演示与控制器回归，不用于衡量模型诊断能力。
+`ReplayModelClient` 的响应由人工 JSON 文件提供，token 为文件声明的模拟用量。`--root` 使用原文，`--reviewed` 使用确认副本。`examples/dep_002_replay.json` 演示配置与快照使候选原因从缺包细化到解释器不一致；固定答案只用于演示与控制器回归，不用于衡量模型诊断能力。
+
+CLI 使用 python-dotenv 加载当前工作目录的 `.env`，保留已有环境变量；不向父目录搜索配置。CLI 按 `--base-url`、`OPENAI_BASE_URL`、`https://api.openai.com/v1` 的优先级选择基础地址，保留版本/网关前缀，去掉尾斜杠后追加 `/responses`。`security/destination.py` 统一规范化 URL，支持 HTTP/HTTPS，拒绝内嵌凭据、查询参数、片段和空白；CloudConsent 在状态边界复用同一校验。启动前将最终地址与显式 `--send-to` 比较，匹配后才建立会话。客户端只使用确认记录中的地址，后续环境变量变化不改变目的地。
+
+`OpenAIResponsesClient` 只从 `OPENAI_API_KEY` 读取凭据，关闭代理环境变量、重定向和隐式重试。HTTP 用于显式选择的服务，会明文传输凭据与材料。自定义地址复用 Responses 协议，服务须支持现有请求字段和返回结构；Chat Completions 适配尚未实现。采用 Responses JSON mode，将现有完整决策 Schema 放入用户数据，并由 Pydantic 验证结果；避免把包含判别联合的本地协议改成供应商的 Schema 子集。`store=false` 控制响应存储选项，不代表供应商零保留。接口依据见 [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create) 与 [JSON mode 说明](https://developers.openai.com/api/docs/guides/structured-outputs)。
+
+HTTPX 异步流逐块读取，响应解码后最多 1 MiB；`asyncio.wait_for` 覆盖连接、读取与关闭，以控制器剩余时间减去请求准备时间为限。当前同步客户端入口使用 `asyncio.run`，供 CLI 调用。输入以 UTF-8 字节数加固定余量保守预留，输出上限最多 4,096 token；额度不足直接停止。API 用量字段必须有效，拒答、截断和非决策输出仍保留已返回用量。缺失用量或网络异常记录 `usage_complete=false`，已知总量不能充当完整账单。取消本机等待无法证明服务端停止生成或计费；这些传输分支已用 HTTP 模拟验证，实际供应商行为待实跑。
 
 ## 报告与轨迹
 
@@ -106,4 +117,4 @@ GPU 查询保留快照采样时间；路径检查标记为运行命令主机的 
 
 `JsonlTrace` 通过调用方显式提供的文本流逐事件写入并 flush，包含序号、记录时间、会话 ID、事件详情和完整状态。缓存动作指向原工具调用 ID。CLI 的 `--trace` 只新建文件；中断时已写入检查点可读，续跑和自动清理尚未实现。轨迹包含原始证据和路径，受与材料相同的隐私限制。
 
-Markdown 渲染、Streamlit、云端发送边界与适配、内置修复验证及真实模型五类端到端验收仍待实现。后续任务与验收缺口统一维护在 [开发进度](progress.md)。
+Markdown 渲染、Streamlit、内置修复验证及真实模型五类端到端验收待完成。后续任务与验收缺口统一维护在 [开发进度](progress.md)。

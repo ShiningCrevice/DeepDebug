@@ -15,6 +15,7 @@
 | `ToolResult` | `ok/unavailable/denied/timeout/error`；非成功必须说明原因，不接受正常结果 data |
 | `DiagnosisReport` | 摘要、环境、事实证据、候选原因、修复适用条件与影响、验证步骤与结果、未决问题、工具记录和停止原因 |
 | `DiagnosisState` | 材料、证据、假设、下一动作、工具记录、预算、停止原因和报告；检查跨对象引用 |
+| `CloudConsent` | 已确认材料摘要、已授权 HTTP/HTTPS Responses 端点、模型 ID、确认时间和发送范围版本；随状态保存 |
 
 协议拒绝未知字段；计数必须是整数，不能用布尔值充当。所有采集/执行时间必须带时区。环境观察需要环境标识；文档观察需要来源 URL 和适用版本（采集日期由 Evidence.collected_at 表示）。材料 ID 用 `A001`，证据用 `E001`，假设用 `H1`，工具调用用 `T001`。
 
@@ -55,25 +56,41 @@
 
 `Budget` 默认 6 次决策、8 次工具、1 次报告修正、50,000 token（含预留 5,000）、120 秒总时限，普通工具 10 秒、GPU 探针 15 秒。`collect` 仅记账；`Controller` 在决策、模型返回和工具边界检查决策数、工具数、总 token 与总耗时。首轮日志解析计入工具数，修正无效决策和重试接口失败计入决策数；缓存命中不增加工具计数。最后一次允许的决策仍可正常结束或执行预算内工具，下轮不再请求模型。
 
-决策可用 token 是总额减报告预留与已用量；返回时耗尽额度则保留用量并停止，不执行该响应动作。当前回放用量是文件声明的模拟值，默认 0。报告由宿主组装，无额外模型调用；`max_report_repairs/report_repairs` 暂保留，后者为 0。允许记录超过限额的实际返回值，以保留超时/超支事实。同步本地工具不能被总时限抢占，返回后停止后续工作；工具单次 timeout 字段尚不作用于这些内存/文件查询。
+决策可用 token 是总额减报告预留与已用量；返回时耗尽额度则保留用量并停止，不执行该响应动作。回放用量是文件声明的模拟值，默认 0；云端用量取供应商响应。`usage_complete` 默认 true，发生网络异常或缺少有效用量后保持 false，表示 tokens_used 仅为已知合计。报告由宿主组装，无额外模型调用；`max_report_repairs/report_repairs` 暂保留，后者为 0。允许记录超过限额的实际返回值，以保留超时/超支事实。同步本地工具不能被总时限抢占，返回后停止后续工作；工具单次 timeout 字段尚不作用于这些内存/文件查询。
 
 连续两轮无新证据或假设变化时 `no_progress`；无效决策最多修正一次，仍无效时 `invalid_action`。模型接口 timeout/unavailable 最多重试一次，失败时 `model_error`；非瞬时 error 直接停止。所有停止路径输出通过完整状态校验的 JSON 报告，预算与错误停止保留已有证据、候选和未决问题。
 
 协议对象不是不可变存储。嵌套列表修改、直接赋值或 `model_copy(update=...)` 不自动完成全状态校验；持久化、调度和输出边界调用 `DiagnosisState.model_validate`（对象会重新校验）或 `model_validate_json`。
 
-## 模型接口与离线决策
+## 模型接口与决策
 
-`ModelClient.decide(ModelRequest) → ModelResponse`：请求含 `instructions`、`state` 副本、`environments`（环境 ID → 材料 ID）、`path_reference_ids`、`response_schema`、可选 `correction`、`timeout_seconds` 与 `max_tokens`（输入输出合计剩余额度）。响应含原始 JSON `content` 和非负整数 `input_tokens/output_tokens`。适配器应遵守时间和额度；当前仅提供离线 `ReplayModelClient`，控制器拒绝 `transport=remote`。真实供应商用量与网络取消尚未实现。
+`ModelClient.decide(ModelRequest) → ModelResponse`：请求含 `instructions`、`state` 副本、`environments`（环境 ID → 材料 ID）、`path_reference_ids`、`response_schema`、可选 `correction`、`timeout_seconds` 与 `max_tokens`（输入输出合计剩余额度）。响应含 JSON `content`、非负整数 `input_tokens/output_tokens` 和可选 `failure=refused/incomplete/error`；failure 非空时先记用量再以 model_error 停止。`ReplayModelClient` 提供离线响应；remote 仅接受绑定确认边界的 `OpenAIResponsesClient`。
 
 `Decision` 含 `observation`（新增事实/判断变化摘要）、`hypotheses`、`action`；仅 finish 必须含 `conclusion={summary, category, fixes, unresolved_questions}`。finish 可声明 completed/tools_unavailable/no_progress；缺信息须用 need_info，预算与接口错误由宿主决定。结论不接受证据内容、工具历史或验证执行字段，引用在提交前按当前状态校验。材料与文档通过请求状态提供，系统指令明确其为不可信数据。
 
 `replay --responses FILE` 的文件是数组，每项包含 `decision` 对象或原始字符串，以及可选模拟用量；原始字符串可用于测试无效 JSON。文件通过相同只读目录边界加载，最多 2 MiB；响应不是执行代码。示例与命令见 [examples](../examples/README.md)。
 
+### 云端发送协议
+
+`diagnose(review, consent, budget=None, trace_stream=None) → DiagnosisState`：从 confirmed 副本创建新会话，记录 `material_review_sha256` 和 `cloud_consent`，首轮解析日志后进入同一控制循环。CLI 必填 `--reviewed/--send-to/--model`，命令本身表示同意发送选定副本；程序显示材料清单、目的地及模型，从副本自动取得摘要写入 CloudConsent；无原始材料或路径参数。CLI 在启动诊断时加载当前工作目录的 `.env`，已有环境变量优先；密钥从 `OPENAI_API_KEY` 读取。库调用方自行配置环境变量。
+
+`CloudConsent` 的 `material_review_sha256` 必须与状态和副本一致；`endpoint` 为规范化后的 HTTP/HTTPS 完整地址，路径以 `/responses` 结尾，不含凭据、查询参数、片段或空白；`model` 为 1～128 位 ASCII 模型标识；`confirmed_at` 必须带时区；`scope` 固定为 `reviewed-evidence-tools-judgments-v1`。确认覆盖所选材料的工具片段、工具结果、固定文档摘要及模型判断；不是对未来任意材料的授权。
+
+CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者都未设置时使用 `https://api.openai.com/v1`。`responses_endpoint(base_url)` 保留基础地址的路径前缀，去尾斜杠后追加 `/responses`，不自动添加 `/v1`；误传完整 Responses 地址会拒绝。`--send-to` 经同一规范化后必须等于计算结果，不匹配返回 2，尚未创建轨迹或请求模型。自定义服务仍使用 Responses 协议，不自动切换到 Chat Completions。库调用方直接在 CloudConsent 中提供完整目的地；适配器不重新读取地址环境变量。
+
+`OutboundBoundary` 每轮核验固定登记内容、当前宿主状态及证据、环境映射、指令、Schema 和剩余额度；拒绝新增路径、材料、替换会话或改目的地/模型。实际请求不带完整源文件、报告、授权记录和本地预算对象，保留材料目录、证据、工具历史和假设。序列化文本再次脱敏，模型响应也在入库前脱敏；证据行号及 JSON Pointer 仍以确认副本为准。
+
+适配器向已确认 endpoint 发送 POST（默认 `/v1/responses`），使用 `text.format.type=json_object`、`store=false`，不提供供应商工具调用接口。输出上限为 `min(4096, 剩余token - 请求UTF-8字节数 - 1024)`，低于 16 时返回本地 budget 失败；输入预留是保守估算，实际用量取响应字段。HTTP 读取上限为解码后的 1 MiB，异步超时覆盖本次 HTTP 操作。供应商错误正文、拒答正文和无效原始决策不写入轨迹。
+
+`ModelFailure.kind`：timeout 表示请求超时；unavailable 表示传输错误、HTTP 408/429/5xx；error 表示其他 HTTP 状态、无效响应或边界拒绝；budget 表示请求准备期间时间/额度不足。timeout/unavailable 共用控制器的一次重试；适配器不隐式重试、不跟随重定向、不读取代理配置。`usage_unknown=true` 会使预算统计标为不完整。收到有效用量但生成不完整/拒答时，记账后停止，不使用部分决策。
+
+`diagnose` 退出码与回放一致：0 为 completed/need_info/no_progress，1 为其他停止原因，2 为启动失败。模型标识由用户选择，真实模型可用性及五类诊断效果尚未验证。
+
 ## JSONL 轨迹
 
 `JsonlTrace(stream).write(event, state, details)` 在写入前重校验完整状态，并逐行 flush。每行含递增 `sequence`、带时区 `recorded_at`、`session_id`、`event`、`details` 和完整 `state`。
 
-事件为 start、model_request、model_response、model_error、invalid_decision、decision、tool、stop。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹，使用固定错误分类。`--trace` 仅新建文件，不自动删除，不支持恢复执行。`--root` 的轨迹包含原始材料；`--reviewed` 的材料内容来自脱敏副本，每个状态保留 `material_review_sha256`。
+事件为 start、model_request、model_response、model_error、invalid_decision、decision、tool、stop。start 标注 offline/remote；model_response 记录输入输出用量；model_error 记录固定分类及用量未知标记。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹。`--trace` 仅新建文件，不自动删除，不支持恢复执行。`--root` 的轨迹包含原始材料；`--reviewed` 的材料内容来自脱敏副本，每个状态保留 `material_review_sha256`；云端状态另保留 `cloud_consent`。
 
 ## 材料登记
 
@@ -98,13 +115,13 @@
 
 每份实际 UTF-8 内容最多 2 MiB，字节数须与 artifact 一致，禁止 NUL。快照保留采集时间；有效 JSON 字符串在解码后脱敏，保留物理行数，证据 JSON Pointer 指向处理后的字段。预览和确认文件中的 artifact 保持 pending，消费有效确认记录时才导入为 reviewed。
 
-`confirm_materials(review, expected_sha256)`：仅接受摘要匹配的 preview，返回 confirmed 副本。修改文本、材料范围、类型、顺序、时间或规则版本后，旧摘要失效。摘要不是签名；确认仅供本地回放，不授权云端发送。
+`confirm_materials(review)`：自动校验 preview 内容与文件内摘要，返回 confirmed 副本。CLI `confirm --preview FILE --output FILE` 表示用户已核查全部材料，输出材料清单，不要求用户输入摘要。修改文本、材料范围、类型、顺序、时间或规则版本后，旧摘要失效。摘要不是签名；确认仅供本地回放，不授权云端发送。
 
 `save_review(path, review)`：重校验后以 0600 权限新建文件，不覆盖已有路径。`load_review(path)`：复用链接/gold/目录边界，读取外层 JSON 最多 128 MiB，再校验摘要、单份内容和总份数。扩大外层读取上限用于容纳十份输入及 JSON 转义，不改变原始材料 2 MiB 限制。
 
 `reviewed_registry(review)` 只接受 confirmed，建立内容固定且状态为 reviewed 的登记表。`replay_reviewed` 用该表运行原控制器，将确认摘要写入 `DiagnosisState.material_review_sha256`；该字段非空时输入必须全部为 reviewed。材料、证据与工具结果不再从原路径读取。CLI `replay --reviewed FILE` 拒绝同时提供 root/log/code/config/snapshot/path/path-root；预览范围之外的路径观察不开放。
 
-`preview/confirm` 成功输出完整 JSON，退出码 0；输入、确认摘要或输出文件错误返回 2，错误信息不回显材料内容。预览、确认、模型和工具数据都只在本地处理。人工固定响应文件独立提供，不经过材料脱敏。
+`preview/confirm` 成功输出完整 JSON，退出码 0；输入、确认摘要或输出文件错误返回 2，错误信息不回显材料内容。预览、确认和回放只在本地处理；云端发送须另经 `diagnose` 授权。人工固定响应文件独立提供，不经过材料脱敏。
 
 ## 取证会话
 
