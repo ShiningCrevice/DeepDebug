@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 13（云端发送边界与模型适配）：`diagnose` 自动加载当前工作目录的 `.env`（已有环境变量优先），支持 `--base-url` / `OPENAI_BASE_URL`，由 `--send-to` 确认最终 Responses 请求地址；材料范围、模型和目的地逐轮校验。HTTP 模拟测试通过，gpt-4.1-mini 与 gpt-6-luna 在线流程已跑通；luna 识别了 dep_002 环境差异但遗漏配置取证，诊断验收未通过。第 1、2 周验收完成；第 3 周预算与轨迹已验收，真实模型端到端诊断待完成。
+- 当前完成 Step 14（取证完整性与在线诊断复测）：补充取证与结束规则，`diagnose --max-tokens` 可设总预算。gpt-6-luna 完成 dep_002 错误解释器诊断及工具反馈后的假设更新；第 3 周验收 3/4，五类报告完成 1/5，修复未执行。复现预算与结果见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步改进模型对启动配置与环境差异的取证，核查并授权开发案例材料，完成五类真实模型端到端报告及至少一例工具反馈改变假设的验收。`confirm` 命令表示已核查本地副本，摘要由程序自动校验和关联；外发须由 `diagnose --reviewed --send-to --model` 明确授权。
+- 下一步核查其余四类开发案例材料，完成真实模型端到端报告验收。`confirm` 命令表示已核查本地副本，摘要由程序自动校验和关联；外发须由 `diagnose --reviewed --send-to --model` 明确授权。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付

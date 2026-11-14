@@ -84,7 +84,9 @@ CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者
 
 `ModelFailure.kind`：timeout 表示请求超时；unavailable 表示传输错误、HTTP 408/429/5xx；error 表示其他 HTTP 状态、无效响应或边界拒绝；budget 表示请求准备期间时间/额度不足。timeout/unavailable 共用控制器的一次重试；适配器不隐式重试、不跟随重定向、不读取代理配置。`usage_unknown=true` 会使预算统计标为不完整。收到有效用量但生成不完整/拒答时，记账后停止，不使用部分决策。
 
-`diagnose` 退出码与回放一致：0 为 completed/need_info/no_progress，1 为其他停止原因，2 为启动失败。模型标识由用户选择，真实模型可用性及五类诊断效果尚未验证。
+`diagnose --max-tokens N` 设置总 token 预算（默认 50,000），包含固定 5,000 报告预留；小于预留的值在启动时拒绝。实际请求使用扣除预留及已用量后的额度，再按上述保守输入预留计算输出上限；因此总预算仍有余量时也可能发生输出截断。单次输出最多 4,096。
+
+`diagnose` 退出码与回放一致：0 为 completed/need_info/no_progress，1 为其他停止原因，2 为启动失败。模型标识由用户选择；真实调用与诊断验收结果见 [开发进度](progress.md)。
 
 ## JSONL 轨迹
 

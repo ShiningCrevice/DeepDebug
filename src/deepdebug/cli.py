@@ -81,6 +81,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     diagnosis.add_argument("--max-decisions", type=int, default=6)
     diagnosis.add_argument("--max-tools", type=int, default=8)
     diagnosis.add_argument("--max-seconds", type=int, default=120)
+    diagnosis.add_argument(
+        "--max-tokens", type=int, default=50_000, help="总 token 预算，含报告预留 5,000"
+    )
     replay_parser = commands.add_parser("replay", help="离线回放固定模型响应，输出状态与 JSON 报告")
     replay_source = replay_parser.add_mutually_exclusive_group(required=True)
     replay_source.add_argument("--root", type=Path, help="独立材料目录")
@@ -165,6 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _show_materials(review)
             print(f"发送至：{consent.endpoint}；模型：{consent.model}", file=sys.stderr)
             budget = Budget(
+                max_tokens=args.max_tokens,
                 max_decision_calls=args.max_decisions,
                 max_tool_calls=args.max_tools,
                 max_duration_seconds=args.max_seconds,

@@ -676,3 +676,34 @@ def test_cli_loads_dotenv_with_environment_priority(
     assert requests[0].headers["Authorization"] == f"Bearer {key}"
     output = capsys.readouterr()
     assert key not in output.out + output.err
+
+
+@pytest.mark.parametrize("max_tokens,expected_code", [(65000, 0), (4999, 2), (0, 2)])
+def test_cli_token_budget(reviewed, tmp_path, http, capsys, max_tokens, expected_code):
+    path = tmp_path / "reviewed.json"
+    save_review(path, reviewed)
+    requests = http(lambda _: httpx.Response(200, json=response()))
+    assert (
+        main(
+            [
+                "diagnose",
+                "--reviewed",
+                str(path),
+                "--model",
+                "test-model",
+                "--send-to",
+                ENDPOINT,
+                "--max-tokens",
+                str(max_tokens),
+            ]
+        )
+        == expected_code
+    )
+    output = capsys.readouterr()
+    if expected_code == 0:
+        state = DiagnosisState.model_validate_json(output.out)
+        assert state.budget.max_tokens == max_tokens
+        assert len(requests) == 1
+        assert json.loads(requests[0].content)["max_output_tokens"] <= 4096
+    else:
+        assert not requests
