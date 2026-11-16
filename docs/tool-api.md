@@ -138,7 +138,7 @@ CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者
 | `check_paths(references, reference_ids)` | 查询宿主已登记的最多 10 个路径引用，结果含存在性、文件/目录类型和授权基准目录；观察来源为 `local/collector` |
 | `search_docs(query, category=None, max_results=3)` | 检索固定本地语料，返回文档 ID、URL、版本、整理时间与摘要，登记 `document` 来源证据 |
 
-快照宿主接口显式绑定材料 ID；调度层把 `environment_id` 绑定至授权快照，按 `probe_ids` 返回环境元数据及所选字段：python_identity → python_version、package_metadata → packages、torch_cuda → torch_cuda。环境元数据始终返回，未采集 torch_cuda 时字段为 null；证据保留原始 JSON，缺失字段不生成证据。`probe_ids=None` 沿用宿主全字段读取。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
+快照宿主接口显式绑定材料 ID；调度层把 `environment_id` 绑定至授权快照，按 `probe_ids` 返回环境元数据及所选字段：python_identity → python_version、package_metadata → packages、torch_cuda → torch_cuda。环境元数据始终返回，未采集 torch_cuda 时字段为 null；证据保留原始 JSON，缺失字段不生成证据。`probe_ids=None` 沿用宿主全字段读取。当前 `replay/diagnose` 仅在调度 `inspect_environment` 读取目标快照后更新 `target_environment`；`read_artifact` 将快照作为普通文本读取，不更新目标环境，文本证据的 `collected_at` 使用材料登记时间。该时间不能作为故障发生时间。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
 
 工具结果完整 JSON 最多 64 KiB，超限返回拒绝结果。证据内容总量另受材料大小和片段上限约束。读取片段时只要省略原文部分就标记 `truncated`。日志支持常见 Python traceback 和异常链；分布式前缀、多语言日志、ExceptionGroup 树形堆栈尚未专门支持。无匹配时返回空异常列表。
 

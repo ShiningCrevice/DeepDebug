@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 14（取证完整性与在线诊断复测）：补充取证与结束规则，`diagnose --max-tokens` 可设总预算。gpt-6-luna 完成 dep_002 错误解释器诊断及工具反馈后的假设更新；第 3 周验收 3/4，五类报告完成 1/5，修复未执行。复现预算与结果见 `docs/progress.md`。
+- 当前完成 Step 15（四类在线诊断与报告验收核查）：五类开发案例已在线运行，完整报告验收通过 2/5（dep_002、device_001）；形状和 OOM 根因及修复方向正确，但 `target_environment=null`；路径案例遗漏日志开头并混淆登记/故障时间，以 need_info 结束。第 3 周验收仍为 3/4，修复未执行。预算、证据核查与逐例结果见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步核查其余四类开发案例材料，完成真实模型端到端报告验收。`confirm` 命令表示已核查本地副本，摘要由程序自动校验和关联；外发须由 `diagnose --reviewed --send-to --model` 明确授权。
+- 下一步修正时间语义、截断日志补读与目标环境绑定，复测路径、形状和 OOM，完成真实模型端到端报告验收。`confirm` 命令表示已核查本地副本，摘要由程序自动校验和关联；外发须由 `diagnose --reviewed --send-to --model` 明确授权。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
