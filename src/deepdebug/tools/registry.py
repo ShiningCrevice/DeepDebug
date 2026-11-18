@@ -23,6 +23,7 @@ class ToolDispatcher:
         self.environments: dict[str, str] = {}
         snapshots = [a for a in session.state.inputs if a.kind == "snapshot"]
         self.target_artifact_id = snapshots[0].artifact_id if snapshots else None
+        target = None
         ambiguous = set()
         for artifact in snapshots:
             try:
@@ -30,11 +31,18 @@ class ToolDispatcher:
             except (ValueError, RecursionError):
                 continue
             environment_id = snapshot.environment.environment_id
+            if artifact.artifact_id == self.target_artifact_id:
+                target = snapshot.environment
             if environment_id in self.environments:
                 ambiguous.add(environment_id)
             self.environments[environment_id] = artifact.artifact_id
         for environment_id in ambiguous:
             del self.environments[environment_id]
+        # Identity comes from the selected snapshot, independently of model tool choices.
+        if target is not None and target.environment_id not in ambiguous:
+            self.session.state = DiagnosisState.model_validate(
+                {**self.session.state.model_dump(), "target_environment": target}
+            )
         self._cache: dict[str, ToolResult] = {}
 
     @staticmethod

@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 15（四类在线诊断与报告验收核查）：五类开发案例已在线运行，完整报告验收通过 2/5（dep_002、device_001）；形状和 OOM 根因及修复方向正确，但 `target_environment=null`；路径案例遗漏日志开头并混淆登记/故障时间，以 need_info 结束。第 3 周验收仍为 3/4，修复未执行。预算、证据核查与逐例结果见 `docs/progress.md`。
+- 当前完成 Step 17（修复联动与假设证据一致性）：路径和 OOM 两例在线报告内容通过，五类累计验收 5/5、第 3 周 4/4、完整里程碑 3/6；379 项测试通过。路径以 need_info 保留复现前检查，修复均未执行。累计通过来自不同 Step 的开发复测，不代表同版统一复测或稳定成功率。详情见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步修正时间语义、截断日志补读与目标环境绑定，复测路径、形状和 OOM，完成真实模型端到端报告验收。`confirm` 命令表示已核查本地副本，摘要由程序自动校验和关联；外发须由 `diagnose --reviewed --send-to --model` 明确授权。
+- 下一步进入第 4 周，先实现 Markdown 报告导出及与 JSON 的内容一致性检查，再接入 Streamlit 展示与预置修复验证。`confirm` 命令表示已核查本地副本，摘要由程序自动校验和关联；外发须由 `diagnose --reviewed --send-to --model` 明确授权。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付

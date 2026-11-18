@@ -126,6 +126,103 @@ def test_need_info_retains_concrete_questions(session):
     assert state.report.unresolved_questions == ["请提供故障解释器的环境快照。"]
 
 
+def partial_diagnosis():
+    decision = need_info()
+    decision["hypotheses"] = [hypothesis(evidence=["E001"])]
+    decision["conclusion"] = dict(
+        summary="日志表明依赖导入失败，尚缺目标环境。",
+        category="dependency",
+        fixes=[
+            dict(
+                hypothesis_id="H1",
+                description="若确认目标环境缺包，使用预期环境中的依赖。",
+                conditions="先核对实际与预期解释器。",
+                impact="改变任务使用的依赖环境。",
+                evidence_ids=["E001"],
+                verification_steps=["在目标环境验证导入。"],
+                success_criteria="目标解释器可导入所需依赖。",
+            )
+        ],
+        unresolved_questions=["请提供故障解释器的环境快照。", "预期使用哪个环境？"],
+    )
+    return decision
+
+
+@pytest.mark.parametrize("include_questions", [False, True])
+def test_need_info_retains_supported_conclusion_and_action_questions(session, include_questions):
+    decision = partial_diagnosis()
+    if not include_questions:
+        decision["conclusion"]["unresolved_questions"] = []
+    state, _, events = run(session, [decision])
+    assert state.stop_reason == "need_info"
+    assert state.report.category == "dependency"
+    assert state.report.summary == decision["conclusion"]["summary"]
+    assert len(state.report.fixes) == 1
+    assert state.report.unresolved_questions == ["请提供故障解释器的环境快照。"] + (
+        ["预期使用哪个环境？"] if include_questions else []
+    )
+    assert state.report.verifications[0].status == "未执行"
+    assert events[-1]["state"] == state.model_dump(mode="json")
+
+
+@pytest.mark.parametrize("field,value", [("evidence_ids", ["E999"]), ("hypothesis_id", "H9")])
+def test_need_info_rejects_invalid_fix_references_before_accepting_judgments(session, field, value):
+    decision = partial_diagnosis()
+    decision["conclusion"]["fixes"][0][field] = value
+    state, model, _ = run(session, [decision, decision])
+    assert state.stop_reason == "invalid_action"
+    assert model.requests[1].correction
+    assert state.hypotheses == []
+    assert state.report.fixes == []
+
+
+def test_path_log_can_be_completed_without_changing_evidence_times():
+    root = ROOT / "benchmark/dev/path_001/materials"
+    materials = MaterialRegistry()
+    with AuthorizedRoot(root) as authorized:
+        materials.register(authorized, "log.txt", "log")
+        materials.register(authorized, "target_snapshot.json", "snapshot")
+    session = CollectionSession(materials)
+    model = RecordingModel(
+        [
+            tool(arguments={"artifact_id": "A001", "start_line": 1, "max_lines": 3}),
+            finish(),
+        ]
+    )
+    state = Controller(ToolDispatcher(session), model).run("A001")
+    first = model.requests[0].state
+    assert first.tool_history[0].result.truncated
+    assert not any("cwd=" in e.content for e in first.evidence)
+    added = model.requests[1].state.evidence[-1]
+    assert added.content == "\n".join(materials.get("A001").text.splitlines()[:3])
+    assert "cwd=/demo/work/project/jobs" in added.content
+    assert (added.location.start, added.location.end) == (1, 3)
+    assert added.collected_at == materials.get("A001").registered_at
+    assert added.source.kind == "artifact"
+    assert first.target_environment == state.target_environment
+    assert state.target_environment.collected_at != added.collected_at
+    assert state.evidence[: len(first.evidence)] == first.evidence
+
+
+@pytest.mark.parametrize("read_snapshot", [False, True])
+def test_target_identity_is_available_without_environment_tool(read_snapshot):
+    root = ROOT / "benchmark/dev/shape_001/materials"
+    expected = json.loads((root / "target_snapshot.json").read_text())["environment"]
+    model = RecordingModel(
+        ([tool(arguments={"artifact_id": "A002"})] if read_snapshot else []) + [finish()]
+    )
+    stream = io.StringIO()
+    state = replay(root, "log.txt", [], [], ["target_snapshot.json"], model, trace_stream=stream)
+    assert state.target_environment is not None
+    assert state.target_environment.model_dump(mode="json") == expected
+    assert state.report.target_environment == state.target_environment
+    assert model.requests[0].state.target_environment == state.target_environment
+    assert state.budget.tool_calls == (2 if read_snapshot else 1)
+    events = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert events[0]["state"]["target_environment"] == expected
+    assert events[-1]["state"] == state.model_dump(mode="json")
+
+
 @pytest.mark.parametrize(
     "invalid",
     [
@@ -393,7 +490,8 @@ def test_snapshot_probe_selection_and_target_binding():
         ["target_snapshot.json", "project_snapshot.json"],
         model,
     )
-    assert model.requests[1].state.target_environment is None
+    assert model.requests[0].state.target_environment.environment_id == "ENV_EMPTY"
+    assert model.requests[1].state.target_environment.environment_id == "ENV_EMPTY"
     project = state.tool_history[1].result
     assert set(project.data) == {"environment", "packages"}
     assert state.target_environment.environment_id == "ENV_EMPTY"

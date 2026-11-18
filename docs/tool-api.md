@@ -66,7 +66,7 @@
 
 `ModelClient.decide(ModelRequest) → ModelResponse`：请求含 `instructions`、`state` 副本、`environments`（环境 ID → 材料 ID）、`path_reference_ids`、`response_schema`、可选 `correction`、`timeout_seconds` 与 `max_tokens`（输入输出合计剩余额度）。响应含 JSON `content`、非负整数 `input_tokens/output_tokens` 和可选 `failure=refused/incomplete/error`；failure 非空时先记用量再以 model_error 停止。`ReplayModelClient` 提供离线响应；remote 仅接受绑定确认边界的 `OpenAIResponsesClient`。
 
-`Decision` 含 `observation`（新增事实/判断变化摘要）、`hypotheses`、`action`；仅 finish 必须含 `conclusion={summary, category, fixes, unresolved_questions}`。finish 可声明 completed/tools_unavailable/no_progress；缺信息须用 need_info，预算与接口错误由宿主决定。结论不接受证据内容、工具历史或验证执行字段，引用在提交前按当前状态校验。材料与文档通过请求状态提供，系统指令明确其为不可信数据。
+`Decision` 含 `observation`（新增事实/判断变化摘要）、`hypotheses`、`action`；finish 必须含 `conclusion={summary, category, fixes, unresolved_questions}`，need_info 可选该字段，tool 不接受结论。need_info 的结论引用在接纳假设前校验；报告保留结论中的摘要、分类及建议，并按动作问题在前的顺序合并、去重两处未决问题。未提供结论的 need_info 保留旧行为（日志摘要、unknown 分类、无修复建议）。finish 可声明 completed/tools_unavailable/no_progress；缺信息须用 need_info，预算与接口错误由宿主决定。结论不接受证据内容、工具历史或验证执行字段，引用在提交前按当前状态校验。材料与文档通过请求状态提供，系统指令明确其为不可信数据；同时区分材料登记、工具读取、快照采集及故障时间，并要求在关键事实缺失时补读截断日志的省略区间。 结束前还需核对候选的实例证据与置信度，以及每条修复对其他配置和路径的影响；不同条件或验证步骤的方案分别输出 fixes 项。这些语义要求由模型指令引导，协议仍校验字段及引用，效果通过真实报告核查。
 
 `replay --responses FILE` 的文件是数组，每项包含 `decision` 对象或原始字符串，以及可选模拟用量；原始字符串可用于测试无效 JSON。文件通过相同只读目录边界加载，最多 2 MiB；响应不是执行代码。示例与命令见 [examples](../examples/README.md)。
 
@@ -78,7 +78,7 @@
 
 CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者都未设置时使用 `https://api.openai.com/v1`。`responses_endpoint(base_url)` 保留基础地址的路径前缀，去尾斜杠后追加 `/responses`，不自动添加 `/v1`；误传完整 Responses 地址会拒绝。`--send-to` 经同一规范化后必须等于计算结果，不匹配返回 2，尚未创建轨迹或请求模型。自定义服务仍使用 Responses 协议，不自动切换到 Chat Completions。库调用方直接在 CloudConsent 中提供完整目的地；适配器不重新读取地址环境变量。
 
-`OutboundBoundary` 每轮核验固定登记内容、当前宿主状态及证据、环境映射、指令、Schema 和剩余额度；拒绝新增路径、材料、替换会话或改目的地/模型。实际请求不带完整源文件、报告、授权记录和本地预算对象，保留材料目录、证据、工具历史和假设。序列化文本再次脱敏，模型响应也在入库前脱敏；证据行号及 JSON Pointer 仍以确认副本为准。
+`OutboundBoundary` 每轮核验固定登记内容、当前宿主状态及证据、环境映射、指令、Schema 和剩余额度；拒绝新增路径、材料、替换会话或改目的地/模型。实际请求不带完整源文件、报告、授权记录和本地预算对象，保留材料目录、目标环境身份、证据、工具历史和假设。序列化文本再次脱敏，模型响应也在入库前脱敏；证据行号及 JSON Pointer 仍以确认副本为准。
 
 适配器向已确认 endpoint 发送 POST（默认 `/v1/responses`），使用 `text.format.type=json_object`、`store=false`，不提供供应商工具调用接口。输出上限为 `min(4096, 剩余token - 请求UTF-8字节数 - 1024)`，低于 16 时返回本地 budget 失败；输入预留是保守估算，实际用量取响应字段。HTTP 读取上限为解码后的 1 MiB，异步超时覆盖本次 HTTP 操作。供应商错误正文、拒答正文和无效原始决策不写入轨迹。
 
@@ -138,7 +138,7 @@ CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者
 | `check_paths(references, reference_ids)` | 查询宿主已登记的最多 10 个路径引用，结果含存在性、文件/目录类型和授权基准目录；观察来源为 `local/collector` |
 | `search_docs(query, category=None, max_results=3)` | 检索固定本地语料，返回文档 ID、URL、版本、整理时间与摘要，登记 `document` 来源证据 |
 
-快照宿主接口显式绑定材料 ID；调度层把 `environment_id` 绑定至授权快照，按 `probe_ids` 返回环境元数据及所选字段：python_identity → python_version、package_metadata → packages、torch_cuda → torch_cuda。环境元数据始终返回，未采集 torch_cuda 时字段为 null；证据保留原始 JSON，缺失字段不生成证据。`probe_ids=None` 沿用宿主全字段读取。当前 `replay/diagnose` 仅在调度 `inspect_environment` 读取目标快照后更新 `target_environment`；`read_artifact` 将快照作为普通文本读取，不更新目标环境，文本证据的 `collected_at` 使用材料登记时间。该时间不能作为故障发生时间。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
+快照宿主接口显式绑定材料 ID；调度层把 `environment_id` 绑定至授权快照，按 `probe_ids` 返回环境元数据及所选字段：python_identity → python_version、package_metadata → packages、torch_cuda → torch_cuda。环境元数据始终返回，未采集 torch_cuda 时字段为 null；证据保留原始 JSON，缺失字段不生成证据。`probe_ids=None` 沿用宿主全字段读取。`replay/diagnose` 初始化调度器时，从首份有效且环境 ID 唯一的快照绑定 `target_environment`（环境标识、解释器及采集时间），首轮轨迹和模型请求即包含该身份信息；此步骤不新增证据或工具调用。`read_artifact` 将快照作为普通文本读取，不改变该绑定，文本证据的 `collected_at` 使用材料登记时间。该时间不能作为故障发生时间。CLI 只把第一份快照作为目标，后续比较快照使用 `as_target=False`；第一份失败时目标保持未知。
 
 工具结果完整 JSON 最多 64 KiB，超限返回拒绝结果。证据内容总量另受材料大小和片段上限约束。读取片段时只要省略原文部分就标记 `truncated`。日志支持常见 Python traceback 和异常链；分布式前缀、多语言日志、ExceptionGroup 树形堆栈尚未专门支持。无匹配时返回空异常列表。
 

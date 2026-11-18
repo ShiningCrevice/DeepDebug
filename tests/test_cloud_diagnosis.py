@@ -184,6 +184,36 @@ def test_four_turn_hypothesis_update_uses_real_tools_with_http_fixture(monkeypat
     assert second_state["tool_history"][1]["result"]["status"] == "ok"
 
 
+def test_cloud_request_binds_reviewed_target_identity_without_sending_package_details(
+    monkeypatch, http
+):
+    monkeypatch.setenv("OPENAI_API_KEY", KEY)
+    review = confirm_materials(
+        preview_materials(
+            ROOT / "benchmark/dev/shape_001/materials",
+            "log.txt",
+            [],
+            [],
+            ["target_snapshot.json"],
+        )
+    )
+    decision = need_info()
+    decision["conclusion"] = dict(
+        summary="输入末维与 Linear 参数不一致，需补充模型与数据配置。",
+        category="configuration",
+    )
+    requests = http(lambda _: httpx.Response(200, json=response(decision)))
+    state = diagnose(review, consent(review))
+    sent = json.loads(json.loads(requests[0].content)["input"][0]["content"])["state"]
+    snapshot = json.loads(review.content.materials[1].text)
+    assert sent["target_environment"] == snapshot["environment"]
+    assert state.report.target_environment == state.target_environment
+    assert snapshot["packages"][0]["version"] not in requests[0].content.decode()
+    assert state.report.category == "configuration"
+    assert state.report.unresolved_questions == decision["action"]["questions"]
+    assert state.budget.tool_calls == 1
+
+
 @pytest.mark.parametrize(
     "change", ["digest", "status", "text", "model", "endpoint", "paths", "extra"]
 )

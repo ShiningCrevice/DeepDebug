@@ -90,8 +90,10 @@ class Controller:
                     check_id="none", status="未执行", reason="本次仅执行只读取证，未运行修复验证。"
                 )
             ],
-            unresolved_questions=(
-                conclusion.unresolved_questions if conclusion else questions or []
+            unresolved_questions=list(
+                dict.fromkeys(
+                    [*(questions or []), *(conclusion.unresolved_questions if conclusion else [])]
+                )
             ),
             tool_history=state.tool_history,
             stop_reason=reason,
@@ -211,6 +213,10 @@ class Controller:
                 if decision.action.action == "finish":
                     # Validate references before accepting any part of this decision.
                     self._report(candidate, decision.action.stop_reason, decision.conclusion)
+                elif decision.action.action == "need_info":
+                    self._report(
+                        candidate, "need_info", decision.conclusion, decision.action.questions
+                    )
             except (ValidationError, ValueError):
                 self._event("invalid_decision", correction_available=not repaired)
                 if repaired:
@@ -229,7 +235,9 @@ class Controller:
             if action.action == "finish":
                 return self._stop(action.stop_reason, conclusion=decision.conclusion)
             if action.action == "need_info":
-                return self._stop("need_info", questions=action.questions)
+                return self._stop(
+                    "need_info", conclusion=decision.conclusion, questions=action.questions
+                )
             # Dispatch is permitted for the last decision, but never past time/token/tool limits.
             if self._exhausted(calls=False) or (
                 self.state.budget.tool_calls >= self.state.budget.max_tool_calls
