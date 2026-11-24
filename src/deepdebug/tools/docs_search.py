@@ -39,6 +39,11 @@ class Corpus(Contract):
         return self
 
 
+def load_corpus() -> Corpus:
+    with AuthorizedRoot(CORPUS_ROOT, allow_hidden_root=True) as root:
+        return Corpus.model_validate_json(root.read("documents.json"))
+
+
 def _terms(text: str) -> list[str]:
     """Preserve term frequency, dotted APIs and their suffixes, and Chinese bigrams."""
     terms = []
@@ -54,8 +59,7 @@ def _terms(text: str) -> list[str]:
 class DocumentIndex:
     def __init__(self) -> None:
         # This is the only file read. Queries never select a path or a URL to fetch.
-        with AuthorizedRoot(CORPUS_ROOT, allow_hidden_root=True) as root:
-            corpus = Corpus.model_validate_json(root.read("documents.json"))
+        corpus = load_corpus()
         self._documents = tuple(corpus.documents)
         self._frequencies = [
             Counter(_terms(" ".join([doc.title, *doc.keywords, doc.excerpt])))

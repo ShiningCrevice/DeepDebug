@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 23（评测集扩充与冻结）：10 个开发案例、30 个测试案例，来源分组、标签证据及案例族隔离校验通过；465 项测试通过，完整里程碑 4/6。详情见 `docs/progress.md`。
+- 当前完成 Step 24（B0/B1/A 评测执行器）：固定版本计划、逐例预览、明确授权与三方案原始记录已实现；480 项测试通过，完整里程碑 4/6。真实评测和人工评分待完成，详情见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步实现并执行 B0/B1/A 评测，人工评分后完成课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
+- 下一步执行开发集预检和 B0/B1/A 真实评测，人工评分后完成课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付

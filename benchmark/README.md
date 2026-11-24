@@ -20,3 +20,25 @@ uv run --locked python -m deepdebug.evaluation.dataset verify
 ```
 
 `frozen.json` 记录输入、清单、标签、评分规则与当前 Agent 指令的 SHA-256；verify 在内容改变时失败。冻结操作使用 `freeze`，拒绝覆盖已有文件。当前冻结的是数据和 Agent 指令；B0/B1 提示词、评测参数及代码版本随评测执行计划一起固定。只在开发集调试，不根据测试结果修改提示词。效果评测尚未执行。
+
+## 三方案执行
+
+在已提交且工作树干净的版本生成计划；命令不会调用模型：
+
+```bash
+uv run --locked python -m deepdebug.evaluation.runner prepare runs/eval-dev \
+  --split dev --model MODEL --send-to https://HOST/v1/responses
+```
+
+逐份核查 `*.review.json` 中脱敏材料，以及 `plan.json` 的目的地、模型、预算、版本和摘要。默认每任务 200,000 token 额度、180 秒；A 最多 6 次决策、8 次工具调用，B0/B1 各一次模型调用，实际用量单独记录。该额度包括发送前保守估算，不是固定消费量。
+
+```bash
+uv run --locked python -m deepdebug.evaluation.runner run runs/eval-dev \
+  --reviewed --model MODEL --send-to https://HOST/v1/responses --limit 3
+```
+
+先小批检查；省略 `--limit` 执行余下任务。开发集 30 个任务，测试集以 `--split test` 另建目录得到 90 个任务。API key 从环境或当前 `.env` 读取。计划包含同一模型、默认采样参数、Agent/基线指令、文档摘要和代码版本；任何跟踪文件修改或版本变化都拒绝继续。首次任务开始后不能修改该计划。
+
+B0 只给日志；B1 一次给全部已确认材料和 A 可检索的 15 条文档；A 使用现有控制循环按需取证。评测只读固定材料，本机预置执行工具返回 unavailable，运行验证另行完成。B1 获得完整文档池，A 通过检索选择片段；这些信息差异与计算开销需随结果披露。
+
+每个任务独立目录保存 `started.json`、`result.json` 和 `trace.jsonl`；失败保留，不自动重跑已有目录。中断后有 started 无 result 的任务应计为中断，恢复从下一个任务开始。API 错误正文不保存，用量不完整时费用为空。可在首次运行前为计划填写输入/输出每百万 token 单价和带日期的 price_source；缺价格时不输出费用估算。报告的语义评分由人完成，当前执行器未发布效果指标。
