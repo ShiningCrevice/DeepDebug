@@ -28,6 +28,7 @@ SECTIONS = (
     ("stop_reason", "停止原因"),
 )
 LABELS = {
+    "fix_index": "关联修复序号",
     "artifact_id": "材料编号",
     "display_name": "显示名称",
     "origin": "登记来源",

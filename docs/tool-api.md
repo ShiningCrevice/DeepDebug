@@ -50,7 +50,7 @@
 
 验证状态为 `静态检查通过/预置复现通过/失败/无法执行/未执行`。前三种必须附执行时间、环境、退出码、输出和证据引用；通过要求退出码为 0；失败输出不得截断。后两种不接受已经执行检查的记录，必须说明原因。若探测环境失败，应在工具历史中记录该探测，而非伪造验证执行。
 
-协议校验覆盖结构与一致性。证据真实性、语义支持和实际执行情况需另行核实；控制器只接受模型判断字段，由工具登记证据；目前修复验证统一为“未执行”。最终报告须通过完整 `DiagnosisState` 校验。
+协议校验覆盖结构与一致性。证据真实性、语义支持和实际执行情况需另行核实；控制器只接受模型判断字段，由工具登记证据；未确认建议与预置修复匹配时，报告不关联执行结果；后置验证由宿主记录。最终报告须通过完整 `DiagnosisState` 校验。
 
 `report --state FILE --format markdown|json [--output FILE]` 在输出边界重新校验完整状态，要求存在 report。JSON 输出为独立 `DiagnosisReport`；Markdown 包含同一报告全部字段。报告 materials 目录保留材料编号、显示名称、类型及脱敏状态，非空目录须与状态 inputs 一致；旧状态导出从 inputs 补齐目录。输入使用既有安全读取边界，状态文件上限 128 MiB；输出文件仅新建、权限 0600，省略路径时写标准输出。导出沿用原有材料脱敏状态，不自动确认或外发。
 
@@ -181,3 +181,11 @@ Python 身份采集失败不输出快照；可选探针失败时仍保留 Python
 `MaterialRegistry.register_bytes(name, raw, kind, origin="upload")` 登记显式提供的字节，与本地登记共享 2 MiB/10 份上限、后缀、UTF-8 和 NUL 校验；名称不用于文件读取。`preview_registry` 将已登记内容转换为既有 MaterialReview。界面上传不会写成可执行文件，也不执行上传代码。
 
 Streamlit 页面使用同一 `diagnose` 和 `replay_reviewed`；外发动作由“授权发送并开始诊断”按钮触发，要求已核查预览及有效目的地/模型，凭据仍仅读取 `OPENAI_API_KEY`。`ProgressStream` 接收 JSONL 完整事件，重校验事件状态后交给界面回调；事件数据和下载轨迹来自同一流。
+
+## 固定预置验证
+
+`run_builtin_check` 的 case_id 支持 dependency/path/shape/device，check_id 支持 before_fix/after_fix。旧保留值 dependency_import/interpreter_identity 仍接受协议解析，但无对应执行实现，返回 unavailable。未知案例同样 unavailable。固定检查使用当前解释器，source 为 local/builtin，带实际执行环境标识；不把本机结果当作目标快照事实。
+
+工具 data 保留案例、阶段、预置修复、成功判据、检查状态、解释器、环境标识、时间及 execution；执行成功取得检查结果时工具 status=ok，data.status 区分失败与预置复现通过。工具失败时 data 为空、error 说明原因；缺环境为 unavailable，超时为 timeout，无法保留完整输出为 error。固定普通/设备检查超时为 10/15 秒，输出最多 64 KiB。
+
+`Verification.fix_index` 为可选的从 1 开始修复建议序号，须在 report.fixes 范围内。`verify-report` 读取完整状态，用户通过 matches-preset 确认匹配后执行前后对照，追加证据/工具记录/验证，并重新校验完整状态。未确认时仅记录未执行。CLI 新建验证后状态文件；UI 更新当前结果并追加完整状态轨迹事件。匹配确认是人工核查声明，不是自动语义判分。

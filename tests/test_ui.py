@@ -124,3 +124,23 @@ def test_send_uses_confirmed_scope_and_selected_destination(monkeypatch):
     assert consent.model == "test-model"
     assert "result" not in at.session_state
     assert any("诊断启动失败" in error.value for error in at.error)
+
+
+def test_ui_verification_appends_trace_and_updates_downloads():
+    from deepdebug.tools.builtin_checks import PRESETS
+
+    at = app()
+    at.radio[0].set_value("离线预置演示").run()
+    button(at, "运行依赖案例演示").click().run()
+    at.session_state["result"].report.fixes[0].description = PRESETS["path"]["fix"]
+    at.selectbox[0].set_value("path").run()
+    assert button(at, "运行预置前后对照").disabled
+    at.checkbox[0].check().run()
+    button(at, "运行预置前后对照").click().run()
+    assert not at.exception
+    state = at.session_state["result"]
+    assert [v.status for v in state.report.verifications] == ["失败", "预置复现通过"]
+    events = at.session_state["events"]
+    assert events[-1]["event"] == "verification"
+    assert events[-1]["state"] == state.model_dump(mode="json")
+    assert [e["sequence"] for e in events] == list(range(1, len(events) + 1))

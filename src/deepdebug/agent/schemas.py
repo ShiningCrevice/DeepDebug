@@ -296,6 +296,7 @@ class Verification(Contract):
     reason: Text
     evidence_ids: list[EvidenceId] = Field(default_factory=list)
     execution: CheckExecution | None = None
+    fix_index: PositiveCount | None = None
 
     @model_validator(mode="after")
     def execution_matches_status(self) -> "Verification":
@@ -353,6 +354,8 @@ class DiagnosisReport(Contract):
             require_refs(fix.evidence_ids, known, "evidence IDs")
         for check in self.verifications:
             require_refs(check.evidence_ids, known, "evidence IDs")
+            if check.fix_index is not None and check.fix_index > len(self.fixes):
+                raise ValueError("verification fix index must refer to a report suggestion")
         if self.stop_reason == "completed" and not any(
             h.confidence != "信息不足" for h in self.hypotheses
         ):

@@ -88,10 +88,8 @@ class ToolDispatcher:
                 )
             else:
                 result = self.session.check_paths(self.paths, args["path_reference_ids"])
-        else:  # The validated protocol reserves only run_builtin_check here.
-            result = self.session.record_failure(
-                tool, action.purpose, key, "unavailable", "内置验证执行器尚未实现。"
-            )
+        else:
+            result = self.session.run_builtin_check(**args)
         payload = self.session.state.model_dump()
         payload["tool_history"][-1]["purpose"] = action.purpose
         payload["tool_history"][-1]["arguments_summary"] = key

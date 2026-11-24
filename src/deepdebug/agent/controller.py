@@ -88,7 +88,13 @@ class Controller:
             fixes=conclusion.fixes if conclusion else [],
             verifications=[
                 Verification(
-                    check_id="none", status="未执行", reason="本次仅执行只读取证，未运行修复验证。"
+                    check_id="none",
+                    status="未执行",
+                    reason=(
+                        "预置检查结果见工具记录；尚未确认建议匹配，未关联修复验证。"
+                        if any(r.tool == "run_builtin_check" for r in state.tool_history)
+                        else "本次仅执行只读取证，未运行修复验证。"
+                    ),
                 )
             ],
             unresolved_questions=list(

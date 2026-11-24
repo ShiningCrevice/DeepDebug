@@ -1,7 +1,10 @@
 """Streamlit presentation only; diagnosis uses the shared controller workflow."""
 
 import hashlib
+import io
+import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,12 +13,15 @@ from dotenv import load_dotenv
 
 from deepdebug.agent.schemas import CloudConsent
 from deepdebug.agent.state import Budget
+from deepdebug.agent.trace import JsonlTrace
 from deepdebug.diagnosis import diagnose
 from deepdebug.replay import load_replay, replay_reviewed
 from deepdebug.reporting.render import export_report
 from deepdebug.security.destination import DEFAULT_BASE_URL, responses_endpoint
 from deepdebug.security.review import confirm_materials, preview_materials
+from deepdebug.tools.builtin_checks import PRESETS
 from deepdebug.ui.workflow import ProgressStream, preview_uploads
+from deepdebug.verification import verify_report
 
 
 def _timeline(events: list[dict]) -> None:
@@ -86,6 +92,40 @@ def _downloads() -> None:
         st.download_button(
             "下载运行轨迹", st.session_state.trace, "trace.jsonl", "application/x-ndjson"
         )
+
+
+def _verification() -> None:
+    state = st.session_state.get("result")
+    if state is None or not state.report.fixes:
+        return
+    with st.expander("预置案例修复验证"):
+        case = st.selectbox("预置案例", list(PRESETS))
+        st.write(PRESETS[case]["fix"])
+        st.write("成功判据：" + PRESETS[case]["criteria"])
+        st.text(f"执行环境：本机 {sys.executable}")
+        index = st.selectbox("关联修复建议", range(1, len(state.report.fixes) + 1))
+        st.write(state.report.fixes[index - 1].description)
+        st.caption("仅运行开发者固定错误版和修复版；结果不代表用户训练或生成补丁验证。")
+        matches = st.checkbox(
+            "已核查所选建议与上述预置修复匹配",
+            key=f"match_{state.session_id}_{case}_{index}",
+        )
+        if st.button("运行预置前后对照", disabled=not matches):
+            try:
+                updated = verify_report(state, case, index, matches_preset=True)
+                stream = io.StringIO(st.session_state.get("trace", ""))
+                stream.seek(0, io.SEEK_END)
+                trace = JsonlTrace(stream)
+                trace.sequence = len(st.session_state.get("events", []))
+                trace.write("verification", updated, {"case_id": case, "fix_index": index})
+                st.session_state.result = updated
+                st.session_state.trace = stream.getvalue()
+                st.session_state.events = [
+                    json.loads(line) for line in stream.getvalue().splitlines()
+                ]
+                st.rerun()
+            except (OSError, ValueError):
+                st.error("预置检查失败，请检查执行环境与当前报告。")
 
 
 def main() -> None:
@@ -199,4 +239,5 @@ def main() -> None:
     if not ran and st.session_state.get("events"):
         st.subheader("工具与决策时间线")
         _timeline(st.session_state.events)
+    _verification()
     _downloads()

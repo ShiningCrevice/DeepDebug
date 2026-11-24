@@ -2,7 +2,7 @@
 
 面向 PyTorch 训练与推理故障的诊断助手。目标是根据日志、代码、配置和环境快照，按需补充证据，输出可追溯的候选根因、修复建议和验证方法。
 
-**当前状态：已完成 Step 19（本地 Streamlit 诊断界面）。** 支持上传/粘贴、脱敏核查、明确授权后诊断、实时工具时间线及报告下载；提供离线依赖案例演示。第 4 周 3/4、完整里程碑 3/6；408 项测试通过。内置修复验证待完成。详见 [进度记录](docs/progress.md)。
+**当前状态：已完成 Step 20（预置修复验证）。** 提供依赖、路径、形状、设备四类固定错误版/修复版检查，可经人工确认建议匹配后关联报告。四类本机前后对照通过；第 4 周 4/4、完整里程碑 4/6，422 项测试通过。五类诊断报告的累计验收与预置检查分开统计。详见 [进度记录](docs/progress.md)。
 
 ## 文档导航
 
@@ -146,6 +146,30 @@ uv run --locked deepdebug replay \
 回放沿用 `--code`、`--config`、`--snapshot`、`--path` 与 `--path-root` 的显式登记边界。第一份快照为目标，环境 ID 必须唯一；模型只能读取选定探针对应的快照字段。退出码：`0` 表示完成、请求补充信息或无进展停止；`1` 表示预算、模型接口、无效动作或工具不可用导致停止；`2` 表示输入或输出文件错误。具体原因以状态的 `stop_reason` 和工具历史为准。
 
 `need_info` 可附带已有依据的摘要、分类和条件性修复建议，报告同时保留动作中的补充问题；未提供结论时沿用日志摘要和 unknown 分类。普通文本证据的 `collected_at` 是材料登记时间，不能用来推断故障发生时间。模型在关键事实缺失且日志片段被截断时，可通过 `read_artifact` 补读省略区间。
+
+## 预置修复检查
+
+```bash
+uv run --locked deepdebug builtin-check
+uv run --locked deepdebug builtin-check --case path --check before_fix
+uv run --locked deepdebug builtin-check --case path --check after_fix
+```
+
+不指定案例时列出固定修复与成功判据。案例为 `dependency/path/shape/device`，阶段为 `before_fix/after_fix`。错误版返回“失败”并保留完整输出，修复版通过返回“预置复现通过”；缺解释器、PyTorch/CUDA、超时或无法取得完整输出时返回“无法执行”。退出码为 0 通过、1 未通过/无法执行、2 参数错误。默认使用当前解释器，可通过 `--python /absolute/python` 显式选择本机环境；形状与设备案例需要 PyTorch，设备案例还需要 CUDA。
+
+检查只在临时目录执行开发者固定程序，使用 Python `-I`，普通案例限时 10 秒、设备案例 15 秒，输出上限 64 KiB。依赖案例创建一个预置模块并修正导入目录，路径案例保持工作目录并修正权重引用；不安装包、不修改用户代码。每次结果包含执行环境、解释器、时间、退出码和输出。
+
+核查报告中的建议与列出的预置修复匹配后，可以关联前后对照：
+
+```bash
+uv run --locked deepdebug verify-report --state runs/path.state.json \
+  --case path --fix-index 1 --matches-preset --output runs/path.verified.json
+uv run --locked deepdebug report --state runs/path.verified.json --output runs/path.verified.md
+```
+
+`--fix-index` 从 1 开始；`--matches-preset` 表示用户已核查匹配关系。省略确认标志时只记录“未执行”，不运行检查。退出码取本次修复版检查结果。验证后的完整状态保留原诊断与历史检查，新增证据和工具记录；错误版失败与修复版通过分别列出，不将预置成功当作用户训练或生成补丁验证。后置检查由用户另行触发，独立于已结束的诊断预算，每次仍受固定超时与输出限制。
+
+页面报告下的“预置案例修复验证”提供同一流程，执行环境为页面进程的本机解释器；运行后报告与下载轨迹同步更新。Agent 工具也可调用固定案例，结果留在工具记录；只有经过上述匹配确认流程才关联到修复建议。
 
 ## 报告导出与一致性检查
 

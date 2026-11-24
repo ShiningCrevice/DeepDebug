@@ -13,6 +13,9 @@ target_environment 是宿主从首份有效目标快照绑定的环境标识，�
 source.kind=artifact 的证据 collected_at 是材料登记时间；parse_log/read_artifact
 工具结果的 collected_at 是首次读取时间，缓存复用该值。二者都不是故障发生时间。
 快照/探针结果的采集时间取材料内对应字段。
+run_builtin_check 仅运行开发者预置案例，case_id 可选 dependency/path/shape/device，
+check_id 可选 before_fix/after_fix。其环境是本机固定检查解释器，不是目标快照环境；
+预置结果不能证明当前用户故障根因或修复成功。建议匹配须由用户核查后关联。
 判断故障时间只能依据材料正文的明确记录；不能用登记时间推断快照早于故障或已经过期。
 文档只提供一般规则。证据不足用 need_info；工具无法补充信息时保留不确定性。
 先区分错误的直接表现与导致它的原因。按当前假设选择能区分原因的材料，

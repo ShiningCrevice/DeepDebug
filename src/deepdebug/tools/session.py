@@ -1,9 +1,11 @@
 """Host-driven evidence collection. Model dispatch and diagnosis are separate stages."""
 
 import json
+import sys
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from time import monotonic
 from uuid import uuid4
 
@@ -28,6 +30,7 @@ from deepdebug.agent.schemas import (
 from deepdebug.agent.state import DiagnosisState
 from deepdebug.security.paths import MaterialError
 from deepdebug.tools.artifacts import Excerpt, MaterialRegistry, RegisteredMaterial, excerpt
+from deepdebug.tools.builtin_checks import PHASES, PRESETS, environment_id, run_builtin_check
 from deepdebug.tools.docs_search import DocumentIndex
 from deepdebug.tools.environment import load_snapshot
 from deepdebug.tools.log_parser import parse_log
@@ -327,6 +330,46 @@ class CollectionSession:
             )
 
         return self._run(tool, None, purpose, operation, arguments_summary=arguments_summary)
+
+    def run_builtin_check(self, case_id: str, check_id: str) -> ToolResult:
+        if case_id not in PRESETS or check_id not in PHASES:
+            return self.record_failure(
+                "run_builtin_check",
+                "运行预置检查。",
+                f"{case_id}/{check_id}",
+                "unavailable",
+                "预置案例或检查 ID 未实现。",
+            )
+        source = Source(
+            kind="local",
+            id=f"builtin/{case_id}/{check_id}",
+            environment_id=environment_id(Path(sys.executable)),
+        )
+
+        def operation(_item):
+            checked = run_builtin_check(case_id, check_id)
+            actual_source = source.model_copy(update={"environment_id": checked.environment_id})
+            if checked.tool_status != "ok":
+                raise ObservationFailure(
+                    checked.tool_status, checked.reason, actual_source, checked.executed_at
+                )
+            data = checked.data()
+            observation = dict(
+                source=actual_source,
+                location=FieldLocation(pointer="/execution"),
+                content=json.dumps(data["execution"], ensure_ascii=False),
+                collected_at=checked.executed_at,
+            )
+            return data, [observation], False, None, None
+
+        return self._run(
+            "run_builtin_check",
+            None,
+            "运行开发者预置案例，不执行上传代码。",
+            operation,
+            arguments_summary=f"{case_id}/{check_id}",
+            local_source=source,
+        )
 
     def query_gpu(self, artifact_id: str) -> ToolResult:
         def operation(item):

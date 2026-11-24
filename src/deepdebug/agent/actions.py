@@ -49,8 +49,7 @@ class SearchDocsArguments(Contract):
 
 class BuiltinCheckArguments(Contract):
     case_id: Text
-    # Protocol reservation only; these checks have no executor yet.
-    check_id: Literal["dependency_import", "interpreter_identity"]
+    check_id: Literal["dependency_import", "interpreter_identity", "before_fix", "after_fix"]
 
 
 class ToolActionBase(Contract):

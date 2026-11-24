@@ -30,7 +30,9 @@ from deepdebug.security.review import (
     preview_materials,
     save_review,
 )
+from deepdebug.tools.builtin_checks import PHASES, PRESETS, run_builtin_check
 from deepdebug.tools.capture import CaptureError, capture_environment
+from deepdebug.verification import verify_report
 
 
 def _show_materials(review: MaterialReview) -> None:
@@ -63,6 +65,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     check_report = commands.add_parser("check-report", help="检查 Markdown 与 JSON 报告一致性")
     check_report.add_argument("--json", type=Path, required=True)
     check_report.add_argument("--markdown", type=Path, required=True)
+    builtin = commands.add_parser("builtin-check", help="列出或运行开发者预置检查")
+    builtin.add_argument("--case", choices=PRESETS)
+    builtin.add_argument("--check", choices=PHASES, default="after_fix")
+    builtin.add_argument("--python", type=Path, help="显式选择本机解释器绝对路径，默认当前解释器")
+    verify = commands.add_parser("verify-report", help="确认建议匹配后，将预置前后对照关联到报告")
+    verify.add_argument("--state", type=Path, required=True)
+    verify.add_argument("--case", choices=PRESETS, required=True)
+    verify.add_argument("--fix-index", type=int, required=True, help="报告修复建议序号，从 1 开始")
+    verify.add_argument(
+        "--matches-preset", action="store_true", help="确认已核查该建议匹配预置修复"
+    )
+    verify.add_argument("--python", type=Path)
+    verify.add_argument("--output", type=Path, required=True, help="新建验证后的完整状态")
     preview = commands.add_parser("preview", help="预览显式材料的脱敏副本，保存待确认 JSON")
     preview.add_argument("--root", type=Path, required=True, help="独立材料目录")
     preview.add_argument("--log", required=True)
@@ -131,6 +146,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument("--docs-query", help="追加一次本地文档检索，最多返回 3 条")
     collection.add_argument("--docs-category", choices=get_args(Category), help="文档故障类别过滤")
     args = parser.parse_args(argv)
+    if args.command in {"builtin-check", "verify-report"}:
+        try:
+            if args.command == "builtin-check":
+                if args.case is None:
+                    print(json.dumps(PRESETS, ensure_ascii=False, indent=2))
+                    return 0
+                checked = run_builtin_check(args.case, args.check, args.python)
+                print(json.dumps(checked.data(), ensure_ascii=False, indent=2))
+                return 0 if checked.status.endswith("通过") else 1
+            state = verify_report(
+                load_state(args.state),
+                args.case,
+                args.fix_index,
+                matches_preset=args.matches_preset,
+                python=args.python,
+            )
+            save_export(args.output, state.model_dump_json(indent=2) + "\n")
+            print(state.model_dump_json(indent=2))
+            return 0 if state.report.verifications[-1].status.endswith("通过") else 1
+        except (OSError, ValueError, RecursionError):
+            print("预置检查失败：检查状态、案例、修复序号、解释器与新输出路径。", file=sys.stderr)
+            return 2
     if args.command in {"report", "check-report"}:
         try:
             if args.command == "check-report":
