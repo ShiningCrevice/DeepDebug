@@ -1,0 +1,1 @@
+"""Validated diagnosis report export."""

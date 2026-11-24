@@ -119,4 +119,6 @@ HTTPX 异步流逐块读取，响应解码后最多 1 MiB；`asyncio.wait_for` �
 
 `JsonlTrace` 通过调用方显式提供的文本流逐事件写入并 flush，包含序号、记录时间、会话 ID、事件详情和完整状态。缓存动作指向原工具调用 ID。CLI 的 `--trace` 只新建文件；中断时已写入检查点可读，续跑和自动清理尚未实现。轨迹包含原始证据和路径，受与材料相同的隐私限制。
 
-Markdown 渲染、Streamlit、内置修复验证及真实模型五类端到端验收待完成。后续任务与验收缺口统一维护在 [开发进度](progress.md)。
+`reporting/render.py` 从重新校验的完整状态提取报告，确定性输出 JSON 和 Markdown。Markdown 按报告章节展示全部字段，自由文本使用长度超过内容反引号序列的代码围栏，工具数据保留为 JSON 字面量。导出不调用模型、不改变执行状态；独立 `check-report` 比较 JSON 重渲染结果和 Markdown，人工改动格式也视为不一致。CLI 输出文件仅新建且权限为 0600。
+
+Streamlit 与内置修复验证待完成。后续任务与验收缺口统一维护在 [开发进度](progress.md)。

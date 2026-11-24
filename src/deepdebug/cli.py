@@ -20,6 +20,7 @@ from deepdebug.agent.state import Budget, DiagnosisState
 from deepdebug.collection import collect, search_documents
 from deepdebug.diagnosis import diagnose
 from deepdebug.replay import load_replay, replay, replay_reviewed
+from deepdebug.reporting.render import check_report_files, export_report, load_state, save_export
 from deepdebug.security.destination import DEFAULT_BASE_URL, responses_endpoint
 from deepdebug.security.paths import MaterialError
 from deepdebug.security.review import (
@@ -55,6 +56,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command")
     schema = commands.add_parser("schema", help="输出数据协议的 JSON Schema")
     schema.add_argument("kind", choices=["action", "state", "report", "snapshot", "decision"])
+    report = commands.add_parser("report", help="从完整状态导出报告；不调用模型")
+    report.add_argument("--state", type=Path, required=True)
+    report.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    report.add_argument("--output", type=Path, help="新建输出文件；省略时输出到标准输出")
+    check_report = commands.add_parser("check-report", help="检查 Markdown 与 JSON 报告一致性")
+    check_report.add_argument("--json", type=Path, required=True)
+    check_report.add_argument("--markdown", type=Path, required=True)
     preview = commands.add_parser("preview", help="预览显式材料的脱敏副本，保存待确认 JSON")
     preview.add_argument("--root", type=Path, required=True, help="独立材料目录")
     preview.add_argument("--log", required=True)
@@ -123,6 +131,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument("--docs-query", help="追加一次本地文档检索，最多返回 3 条")
     collection.add_argument("--docs-category", choices=get_args(Category), help="文档故障类别过滤")
     args = parser.parse_args(argv)
+    if args.command in {"report", "check-report"}:
+        try:
+            if args.command == "check-report":
+                matches = check_report_files(args.json, args.markdown)
+                print("报告内容一致。" if matches else "Markdown 与 JSON 报告不一致。")
+                return 0 if matches else 1
+            json_report, markdown = export_report(load_state(args.state))
+            content = markdown if args.format == "markdown" else json_report
+            if args.output:
+                save_export(args.output, content)
+            else:
+                print(content, end="")
+        except (OSError, ValueError, RecursionError):
+            print(
+                "报告操作失败：检查完整状态、报告文件及输出路径；输出文件必须不存在。",
+                file=sys.stderr,
+            )
+            return 2
+        return 0
     if args.command in {"preview", "confirm"}:
         try:
             if args.command == "preview":

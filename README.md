@@ -2,7 +2,7 @@
 
 面向 PyTorch 训练与推理故障的诊断助手。目标是根据日志、代码、配置和环境快照，按需补充证据，输出可追溯的候选根因、修复建议和验证方法。
 
-**当前状态：已完成 Step 17（修复联动与假设证据一致性）。** 路径报告保留配置文件定位，OOM 报告仅保留有实例支持的主因并分列修复条件；两例在线复测的报告内容通过验收。五类开发报告累计 5/5、第 3 周 4/4，379 项测试通过。路径报告以 need_info 保留复现前检查，修复均未执行；累计验收不代表稳定成功率，详见 [进度记录](docs/progress.md)。
+**当前状态：已完成 Step 18（Markdown / JSON 报告导出）。** 支持从完整状态离线导出两种报告并检查一致性，保留证据来源、修复条件与验证状态。第 4 周 1/4、完整里程碑 3/6；396 项测试通过。五类开发报告累计验收 5/5，修复均未执行。详见 [进度记录](docs/progress.md)。
 
 ## 文档导航
 
@@ -127,6 +127,20 @@ uv run --locked deepdebug replay \
 回放沿用 `--code`、`--config`、`--snapshot`、`--path` 与 `--path-root` 的显式登记边界。第一份快照为目标，环境 ID 必须唯一；模型只能读取选定探针对应的快照字段。退出码：`0` 表示完成、请求补充信息或无进展停止；`1` 表示预算、模型接口、无效动作或工具不可用导致停止；`2` 表示输入或输出文件错误。具体原因以状态的 `stop_reason` 和工具历史为准。
 
 `need_info` 可附带已有依据的摘要、分类和条件性修复建议，报告同时保留动作中的补充问题；未提供结论时沿用日志摘要和 unknown 分类。普通文本证据的 `collected_at` 是材料登记时间，不能用来推断故障发生时间。模型在关键事实缺失且日志片段被截断时，可通过 `read_artifact` 补读省略区间。
+
+## 报告导出与一致性检查
+
+先将 `replay` 或 `diagnose` 的标准输出保存为状态 JSON，例如 `runs/dep_002.state.json`，再执行：
+
+```bash
+uv run --locked deepdebug report --state runs/dep_002.state.json --output runs/report.md
+uv run --locked deepdebug report --state runs/dep_002.state.json --format json --output runs/report.json
+uv run --locked deepdebug check-report --json runs/report.json --markdown runs/report.md
+```
+
+导出前重新校验完整状态及报告引用；尚无报告的 `collect` 状态不可导出。JSON 文件是独立的 `DiagnosisReport`，Markdown 包含同一报告的全部字段，包括材料编号与显示名称目录、证据原文、位置、采集时间、文档 URL/版本、工具结果、修复条件和执行状态。文本以字面量显示，保留代码及 Markdown 符号。导出不会运行模型或修复。
+
+省略 `--output` 时输出到标准输出；指定文件时仅新建，权限 `0600`，父目录须已存在。原始回放的报告仍含未脱敏材料；导出沿用输入状态中的内容。`check-report` 将 JSON 重新渲染后与 Markdown 精确比较，人工改动排版也会报告不一致；它检查格式间内容一致性，不判断诊断结论是否正确。退出码为 `0` 成功/一致、`1` 不一致、`2` 输入或输出错误。
 
 ## 本地取证
 

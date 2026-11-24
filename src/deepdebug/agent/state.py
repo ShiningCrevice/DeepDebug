@@ -94,6 +94,8 @@ class DiagnosisState(Contract):
         if self.stop_reason is not None and self.next_action is not None:
             raise ValueError("stopped state cannot have a pending action")
         if self.report is not None:
+            if self.report.materials and self.report.materials != self.inputs:
+                raise ValueError("report materials must match session inputs")
             if self.report.session_id != self.session_id:
                 raise ValueError("report belongs to another session")
             if self.report.stop_reason != self.stop_reason:

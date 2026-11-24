@@ -78,6 +78,7 @@ class Controller:
         questions: list[str] | None = None,
     ) -> DiagnosisReport:
         return DiagnosisReport(
+            materials=state.inputs,
             session_id=state.session_id,
             summary=conclusion.summary if conclusion else (state.error_summary or "诊断已停止。"),
             category=conclusion.category if conclusion else "unknown",

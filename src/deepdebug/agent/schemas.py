@@ -326,6 +326,7 @@ def validate_evidence_references(
 class DiagnosisReport(Contract):
     schema_version: Literal["1"] = "1"
     session_id: Text
+    materials: list[Artifact] = Field(default_factory=list, max_length=10)
     summary: Text
     category: Category
     target_environment: TargetEnvironment | None
@@ -339,6 +340,11 @@ class DiagnosisReport(Contract):
 
     @model_validator(mode="after")
     def references_exist(self) -> "DiagnosisReport":
+        artifacts = unique_ids([a.artifact_id for a in self.materials], "artifact IDs")
+        if self.materials:
+            for evidence in self.evidence:
+                if evidence.source.kind in {"artifact", "snapshot"}:
+                    require_refs([evidence.source.id], artifacts, "artifact IDs")
         known = unique_ids([e.evidence_id for e in self.evidence], "evidence IDs")
         validate_evidence_references(self.hypotheses, self.tool_history, known)
         hypotheses = {h.hypothesis_id for h in self.hypotheses}
