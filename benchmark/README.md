@@ -79,3 +79,16 @@ uv run --locked python -m deepdebug.evaluation.scoring summarize runs/eval-dev \
 汇总按计划保留全部任务：常见故障测试分母 20，信息不足/范围外 6，攻击 4；开发集按其实际数量统计。未运行或人工评分未齐时效果值为 null；失败和中断保留，未产出报告不能给根因/修复命中。证据支持率按可核查结论总数计算，另报无可核查结论的案例数。真实采集和 synthetic 分组分别输出。
 
 评分表绑定计划、结果与轨迹摘要，中断任务绑定 started 和已有轨迹；补跑或修改结果后旧评分表失效，须另生成并重新核查。中断轨迹中的已知 token 保留，总用量标记不完整。耗时、完整输入/输出/合计用量与已知费用分别给出样本数、均值、中位数及 nearest-rank P95；未知量不填零。汇总内的失败清单供至少五个典型失败分析使用，不自动生成语义结论。
+
+## 六案例固定运行检查
+
+```bash
+uv run --locked python -m deepdebug.evaluation.runtime_checks \
+  --python /absolute/target-env/bin/python --output runs/runtime-checks.json
+```
+
+预先选择 `path_001/path_002/shape_001/shape_002/device_001/device_002`，每例执行固定错误版与修复版。`--case` 可重复指定子集；默认六例。它们分别覆盖相对路径基准、目录误作文件、Linear 末维、标签批量长度、输入迁移和中间张量设备。采用固定代码、小张量、临时目录，单次最多 15 秒/64 KiB，不执行 benchmark 输入文件。
+
+输出记录固定程序摘要、解释器/环境 ID、时间、实际退出码、完整有限输出和预期错误/成功判据。缺 PyTorch/CUDA 或进程失败时明确记录；仅错误版命中预期且修复版通过才计固定回归通过。输出文件仅新建。退出码 0 为所有固定回归通过，1 为失败或无法执行，2 为参数/输出错误。
+
+这组预置检查与原四类产品工具分开，不改冻结 Agent 指令。`model_fix_match` 初始为 pending_human_review，须根据实际模型报告确认建议与预置修复的条件、对象和影响一致后，另行记录端到端判定；固定回归数不能直接填入模型修复建议验证通过率。
