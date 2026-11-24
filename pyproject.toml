@@ -17,6 +17,11 @@ dependencies = [
 [project.scripts]
 deepdebug = "deepdebug.cli:main"
 
+[project.optional-dependencies]
+ui = [
+    "streamlit>=1.40,<2",
+]
+
 [dependency-groups]
 dev = ["pytest>=8,<9", "ruff>=0.9,<1"]
 capture = ["torch==2.9.1", "numpy>=2,<3"]

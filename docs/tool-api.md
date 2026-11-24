@@ -175,3 +175,9 @@ Python 身份采集失败不输出快照；可选探针失败时仍保留 Python
 文档证据来源为 `document/D001…`，包含来源 URL 和适用版本；位置 `/excerpt` 相对于该文档记录，`collected_at` 是语料整理时间。工具结果来源为 `local/docs_index/collector`，时间是本次查询时刻。同一会话的重复命中复用证据 ID，宿主直接调用仍计数，控制器缓存命中不计数。该工具不修改目标环境或产生诊断报告。
 
 独立入口为 `search-docs QUERY [--category CATEGORY] [--max-results N]`；`collect --docs-query QUERY [--docs-category CATEGORY]` 在取证末尾追加一次检索。两者均输出完整校验后的 `DiagnosisState`。文档版本不自动与目标环境匹配，文档内容仍是不可信数据；模型使用文档作实例结论的语义支持检查尚未实现。
+
+## 上传与界面入口
+
+`MaterialRegistry.register_bytes(name, raw, kind, origin="upload")` 登记显式提供的字节，与本地登记共享 2 MiB/10 份上限、后缀、UTF-8 和 NUL 校验；名称不用于文件读取。`preview_registry` 将已登记内容转换为既有 MaterialReview。界面上传不会写成可执行文件，也不执行上传代码。
+
+Streamlit 页面使用同一 `diagnose` 和 `replay_reviewed`；外发动作由“授权发送并开始诊断”按钮触发，要求已核查预览及有效目的地/模型，凭据仍仅读取 `OPENAI_API_KEY`。`ProgressStream` 接收 JSONL 完整事件，重校验事件状态后交给界面回调；事件数据和下载轨迹来自同一流。

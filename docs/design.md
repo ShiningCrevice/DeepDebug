@@ -6,7 +6,7 @@
 
 采用 Python 3.10+、`src/deepdebug` 包布局和 uv，默认开发解释器为 Python 3.12。`pyproject.toml` 管理版本与依赖声明，`uv.lock` 锁定依赖；CLI 从安装元数据获取版本，避免重复维护版本号。
 
-标准库 argparse 负责命令行交互，`deepdebug` 与 `python -m deepdebug` 共享 `main()`。Pydantic v2 负责数据协议和边界校验，pytest 与 Ruff 分别用于测试和静态检查。BM25 使用标准库实现；HTTPX 负责模型 HTTP 访问，Streamlit 待引入。普通快照取证无需安装 PyTorch、GPU 驱动或配置模型密钥。独立的 `capture` 开发依赖组包含固定版本 PyTorch 2.9.1 与 NumPy，用于真实故障采集；Linux/Windows 的 torch 来自显式 CUDA 12.8 官方索引，其他包仍用默认包源。
+标准库 argparse 负责命令行交互，`deepdebug` 与 `python -m deepdebug` 共享 `main()`。Pydantic v2 负责数据协议和边界校验，pytest 与 Ruff 分别用于测试和静态检查。BM25 使用标准库实现；HTTPX 负责模型 HTTP 访问，Streamlit 通过可选 `ui` 依赖提供本地界面。普通快照取证无需安装 PyTorch、GPU 驱动或配置模型密钥。独立的 `capture` 开发依赖组包含固定版本 PyTorch 2.9.1 与 NumPy，用于真实故障采集；Linux/Windows 的 torch 来自显式 CUDA 12.8 官方索引，其他包仍用默认包源。
 
 ## 当前数据流与模块职责
 
@@ -121,4 +121,12 @@ HTTPX 异步流逐块读取，响应解码后最多 1 MiB；`asyncio.wait_for` �
 
 `reporting/render.py` 从重新校验的完整状态提取报告，确定性输出 JSON 和 Markdown。Markdown 按报告章节展示全部字段，自由文本使用长度超过内容反引号序列的代码围栏，工具数据保留为 JSON 字面量。导出不调用模型、不改变执行状态；独立 `check-report` 比较 JSON 重渲染结果和 Markdown，人工改动格式也视为不一致。CLI 输出文件仅新建且权限为 0600。
 
-Streamlit 与内置修复验证待完成。后续任务与验收缺口统一维护在 [开发进度](progress.md)。
+内置修复验证待完成。后续任务与验收缺口统一维护在 [开发进度](progress.md)。
+
+## 本地交互界面
+
+`app.py` 启动 `ui/app.py`，通过可选 ui 依赖提供 Streamlit 页面。界面将上传字节交给 `MaterialRegistry.register_bytes`，与本地文件共享类型、UTF-8、大小和数量校验；上传名称只作为显示元数据，不作为路径。`preview_registry` 为本地及上传登记材料生成相同的脱敏确认协议，登记来源分别保留 local/upload/paste。
+
+页面核查确认后由 `confirm_materials` 固定副本，通过 `CloudConsent` 绑定目的地、模型和摘要，再调用既有 `diagnose`。材料内容或模式变化会失效预览与结果；预览摘要绑定核查勾选。`ProgressStream` 接收既有 JSONL 完整事件并更新进度和时间线，保留可下载轨迹；诊断决策仍由单 Agent 控制器负责。独立预置演示使用共享 reviewed 回放流程。
+
+`.streamlit/config.toml` 将监听地址限制为 127.0.0.1、上传大小设为 2 MiB。页面会话内容在服务器内存，清除入口移除页面状态；下载文件独立管理。磁盘会话保存、保留期清理和继续诊断尚待实现。界面交互使用 Streamlit AppTest 验证，真实服务启动另以本机 HTTP 检查。

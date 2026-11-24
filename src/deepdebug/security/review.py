@@ -81,6 +81,11 @@ def preview_materials(
         for kind, names in (("code", code), ("config", config), ("snapshot", snapshots)):
             for name in names:
                 registry.register(authorized, name, kind)
+    return preview_registry(registry)
+
+
+def preview_registry(registry: MaterialRegistry) -> MaterialReview:
+    """Create the same redacted review for local files and uploaded material bytes."""
     originals = [registry.get(a.artifact_id) for a in registry.artifacts()]
     redactor = Redactor(item.text for item in originals)
     materials = []

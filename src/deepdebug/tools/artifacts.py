@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 from deepdebug.agent.schemas import Artifact
-from deepdebug.security.paths import AuthorizedRoot, MaterialError
+from deepdebug.security.paths import MAX_FILE_BYTES, AuthorizedRoot, MaterialError
 
 MAX_EXCERPT_CHARS = 16_000
 SUFFIXES = {
@@ -35,14 +35,30 @@ class MaterialRegistry:
         relative: str,
         kind: Literal["log", "code", "config", "snapshot"],
     ) -> Artifact:
+        self._check_registration(relative, kind)
+        return self.register_bytes(relative, root.read(relative), kind, origin="local")
+
+    def _check_registration(self, name: str, kind: str) -> None:
         if len(self._items) >= 10:
             raise MaterialError("每个会话最多登记 10 份材料。")
-        if kind not in SUFFIXES or Path(relative).suffix.lower() not in SUFFIXES[kind]:
+        if kind not in SUFFIXES or Path(name).suffix.lower() not in SUFFIXES[kind]:
             raise MaterialError("材料类型与文件扩展名不匹配。")
-        name = Path(relative).as_posix()
-        if name in self._names:
+        if Path(name).as_posix() in self._names:
             raise MaterialError("同一材料不能重复登记。")
-        raw = root.read(relative)
+
+    def register_bytes(
+        self,
+        name: str,
+        raw: bytes,
+        kind: Literal["log", "code", "config", "snapshot"],
+        *,
+        origin: Literal["local", "upload", "paste"] = "upload",
+    ) -> Artifact:
+        """Register explicitly supplied bytes; names never become filesystem paths."""
+        self._check_registration(name, kind)
+        name = Path(name).as_posix()
+        if len(raw) > MAX_FILE_BYTES:
+            raise MaterialError("单份材料超过 2 MiB。")
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError as exc:
@@ -53,7 +69,7 @@ class MaterialRegistry:
             artifact_id=f"A{len(self._items) + 1:03}",
             kind=kind,
             display_name=name,
-            origin="local",
+            origin=origin,
             size_bytes=len(raw),
             redaction_status="pending",
         )
