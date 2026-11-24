@@ -3,7 +3,7 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 26（干净环境复现）：独立克隆新环境中 495 项测试、构建、报告双格式一致性和页面启动通过；完整里程碑 4/6。真实评测、人工评分及最终交付待完成，详情见 `docs/progress.md` 和 `docs/reproduction.md`。
+- 当前完成 Step 27（技术文稿与交付索引）：技术报告、演示脚本和第三方说明已整理；495 项测试及独立环境复现通过，完整里程碑 4/6。真实评测、人工评分、六案例运行验证、许可证和视频待完成，详情见 `docs/progress.md`、`docs/delivery.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
 - 下一步执行开发集预检和 B0/B1/A 真实评测，人工评分后完成课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。

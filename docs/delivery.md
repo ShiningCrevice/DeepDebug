@@ -1,0 +1,24 @@
+# 交付索引
+
+工程功能、数据集、评测工具与干净环境复现已完成。正式评测、人工评分、六案例运行验证、许可证和最终视频仍待完成，当前不能标为完整课程交付。
+
+| 材料 | 位置 | 当前状态 |
+|---|---|---|
+| 源码与依赖锁 | src/、app.py、pyproject.toml、uv.lock | 已实现并验证 |
+| 使用入口 | [README](../README.md) | 已提供 |
+| 架构与工具协议 | [design](design.md)、[tool-api](tool-api.md) | 与当前实现同步 |
+| 技术报告 | [technical-report](technical-report.md) | 实现章节完成；实测结果待补；Markdown 约 6,900 字符，排版页数未验证 |
+| 数据集与 rubric | [benchmark](../benchmark/README.md) | 10 开发、30 测试，已冻结；标签待人工评分复核 |
+| 检索语料来源 | [knowledge](../knowledge/README.md) | 15 条摘要，来源与版本完整 |
+| 对照评测结果 | 运行目录中的 plan/result/trace/summary | 执行和汇总工具已就绪，真实运行待授权 |
+| 代表性报告 | 本地 runs/clean-smoke/report.md 与 report.json | 独立克隆已导出 synthetic 演示，双格式一致 |
+| 运行验证 | builtin-check 与 verify-report | 四类固定程序已有实跑；六个选定案例的端到端验证待补 |
+| 复现记录 | [reproduction](reproduction.md) | 独立环境 495 项测试、构建、报告和 UI 启动通过 |
+| 第三方说明 | [third-party](third-party.md) | 语料来源和安装依赖元数据已列出 |
+| 项目许可证 | 根目录 LICENSE | 待仓库权利人选择 |
+| 视频脚本 | [demo-script](demo-script.md) | 六分钟分镜已提供，结果段待实测 |
+| 演示视频 | 本地交付目录 | 尚未录制 |
+
+运行产物、私有材料和密钥不提交 Git。最终交付包另存本地目录，选入可公开报告与轨迹时逐项核查，并保持 synthetic、真实运行、人工评分和修复执行状态的原有标记。
+
+正式评测完成后，更新技术报告的结果与失败分析，至少说明五个典型失败、各指标分母、真实/synthetic 分组、模型与代码版本及费用来源。保留不达标项，不修改冻结标签来提高分数。课程模板、署名和视频格式未提供，应在最终打包前据实际要求调整。
