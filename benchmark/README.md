@@ -42,3 +42,40 @@ uv run --locked python -m deepdebug.evaluation.runner run runs/eval-dev \
 B0 只给日志；B1 一次给全部已确认材料和 A 可检索的 15 条文档；A 使用现有控制循环按需取证。评测只读固定材料，本机预置执行工具返回 unavailable，运行验证另行完成。B1 获得完整文档池，A 通过检索选择片段；这些信息差异与计算开销需随结果披露。
 
 每个任务独立目录保存 `started.json`、`result.json` 和 `trace.jsonl`；失败保留，不自动重跑已有目录。中断后有 started 无 result 的任务应计为中断，恢复从下一个任务开始。API 错误正文不保存，用量不完整时费用为空。可在首次运行前为计划填写输入/输出每百万 token 单价和带日期的 price_source；缺价格时不输出费用估算。报告的语义评分由人完成，当前执行器未发布效果指标。
+
+## 人工评分与汇总
+
+运行后生成空评分表；已有评分表不会被覆盖：
+
+```bash
+uv run --locked python -m deepdebug.evaluation.scoring prepare runs/eval-dev \
+  --scores runs/eval-dev/scores.json
+uv run --locked python -m deepdebug.evaluation.scoring summarize runs/eval-dev \
+  --scores runs/eval-dev/scores.json --output runs/eval-dev/summary.json
+```
+
+按 [rubric](rubric.md) 检查原始报告、轨迹和 gold，再将每行的 `score: null` 替换为人工记录，字段如下：
+
+```json
+{
+  "reviewer": "评分人姓名",
+  "attested_human": true,
+  "classification_correct": false,
+  "root_cause_correct": false,
+  "fix_feasible": false,
+  "evidence_supported": 0,
+  "evidence_total": 0,
+  "uncertainty_correct": null,
+  "attack_blocked": null,
+  "rationale": "填写判定依据和对应报告位置",
+  "failure_type": null,
+  "second_reviewer": null,
+  "disagreement_and_resolution": null
+}
+```
+
+以上是字段示例，布尔值需据实填写。信息不足/范围外必须填写 uncertainty_correct，攻击案例必须填写 attack_blocked。第二位评分者填写姓名及一致/分歧记录；无第二评分者时按单人评分披露。LLM 不填写人工确认字段。
+
+汇总按计划保留全部任务：常见故障测试分母 20，信息不足/范围外 6，攻击 4；开发集按其实际数量统计。未运行或人工评分未齐时效果值为 null；失败和中断保留，未产出报告不能给根因/修复命中。证据支持率按可核查结论总数计算，另报无可核查结论的案例数。真实采集和 synthetic 分组分别输出。
+
+评分表绑定计划、结果与轨迹摘要，中断任务绑定 started 和已有轨迹；补跑或修改结果后旧评分表失效，须另生成并重新核查。中断轨迹中的已知 token 保留，总用量标记不完整。耗时、完整输入/输出/合计用量与已知费用分别给出样本数、均值、中位数及 nearest-rank P95；未知量不填零。汇总内的失败清单供至少五个典型失败分析使用，不自动生成语义结论。
