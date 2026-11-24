@@ -30,6 +30,7 @@ from deepdebug.security.review import (
     preview_materials,
     save_review,
 )
+from deepdebug.sessions import SavedSession, SessionStore
 from deepdebug.tools.builtin_checks import PHASES, PRESETS, run_builtin_check
 from deepdebug.tools.capture import CaptureError, capture_environment
 from deepdebug.verification import verify_report
@@ -78,6 +79,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     verify.add_argument("--python", type=Path)
     verify.add_argument("--output", type=Path, required=True, help="新建验证后的完整状态")
+    sessions = commands.add_parser("sessions", help="保存、打开、删除会话；默认保留 7 天")
+    sessions.add_argument("operation", choices=["save", "list", "load", "delete", "cleanup"])
+    sessions.add_argument("--directory", type=Path, default=Path("sessions"))
+    sessions.add_argument("--id", help="已保存会话 ID")
+    sessions.add_argument("--state", type=Path, help="save 时读取的完整状态")
+    sessions.add_argument("--reviewed", type=Path, help="save 时保存的已确认副本")
+    sessions.add_argument("--trace", type=Path, help="save 时保存的 JSONL 轨迹")
     preview = commands.add_parser("preview", help="预览显式材料的脱敏副本，保存待确认 JSON")
     preview.add_argument("--root", type=Path, required=True, help="独立材料目录")
     preview.add_argument("--log", required=True)
@@ -146,6 +154,61 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument("--docs-query", help="追加一次本地文档检索，最多返回 3 条")
     collection.add_argument("--docs-category", choices=get_args(Category), help="文档故障类别过滤")
     args = parser.parse_args(argv)
+    if args.command == "sessions":
+        try:
+            store = SessionStore(args.directory)
+            expired = store.cleanup()
+            if args.operation == "save":
+                if args.state is None:
+                    parser.error("sessions save 需要 --state。")
+                trace_text = ""
+                if args.trace is not None:
+                    from deepdebug.reporting.render import MAX_STATE_BYTES
+                    from deepdebug.security.paths import AuthorizedRoot
+
+                    with AuthorizedRoot(args.trace.absolute().parent) as root:
+                        trace_text = root.read(args.trace.name, max_bytes=MAX_STATE_BYTES).decode(
+                            "utf-8"
+                        )
+                bundle = SavedSession(
+                    saved_at=datetime.now(timezone.utc),
+                    state=load_state(args.state),
+                    review=load_review(args.reviewed) if args.reviewed else None,
+                    trace=trace_text,
+                )
+                print(store.save(bundle, args.id))
+            elif args.operation == "list":
+                print(
+                    json.dumps(
+                        [
+                            {
+                                "id": key,
+                                "session_id": item.state.session_id,
+                                "saved_at": item.saved_at.isoformat(),
+                                "stop_reason": item.state.stop_reason,
+                            }
+                            for key, item in store.list_sessions()
+                        ],
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+            elif args.operation in {"load", "delete"}:
+                if not args.id:
+                    parser.error("sessions load/delete 需要 --id。")
+                if args.operation == "load":
+                    print(store.load(args.id).model_dump_json(indent=2))
+                else:
+                    store.delete(args.id)
+                    print("会话已删除。")
+            else:
+                print(json.dumps({"deleted": expired}))
+        except (OSError, ValueError, KeyError, RecursionError):
+            print(
+                "会话操作失败：检查专用目录、会话 ID、文件结构和状态/轨迹一致性。", file=sys.stderr
+            )
+            return 2
+        return 0
     if args.command in {"builtin-check", "verify-report"}:
         try:
             if args.command == "builtin-check":

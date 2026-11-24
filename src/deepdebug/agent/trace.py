@@ -4,7 +4,19 @@ import json
 from datetime import datetime, timezone
 from typing import TextIO
 
+from pydantic import AwareDatetime, JsonValue
+
+from deepdebug.agent.schemas import Contract, PositiveCount, Text
 from deepdebug.agent.state import DiagnosisState
+
+
+class TraceEvent(Contract):
+    sequence: PositiveCount
+    event: Text
+    recorded_at: AwareDatetime
+    session_id: Text
+    details: dict[str, JsonValue]
+    state: DiagnosisState
 
 
 class JsonlTrace:

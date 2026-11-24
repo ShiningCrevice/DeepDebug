@@ -2,7 +2,6 @@
 
 import hashlib
 import io
-import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -13,12 +12,13 @@ from dotenv import load_dotenv
 
 from deepdebug.agent.schemas import CloudConsent
 from deepdebug.agent.state import Budget
-from deepdebug.agent.trace import JsonlTrace
+from deepdebug.agent.trace import JsonlTrace, TraceEvent
 from deepdebug.diagnosis import diagnose
 from deepdebug.replay import load_replay, replay_reviewed
 from deepdebug.reporting.render import export_report
 from deepdebug.security.destination import DEFAULT_BASE_URL, responses_endpoint
 from deepdebug.security.review import confirm_materials, preview_materials
+from deepdebug.sessions import SavedSession, SessionStore
 from deepdebug.tools.builtin_checks import PRESETS
 from deepdebug.ui.workflow import ProgressStream, preview_uploads
 from deepdebug.verification import verify_report
@@ -57,6 +57,8 @@ def _run(review, *, consent=None, budget=None, demo_root=None):
             _timeline([entry])
 
     stream = ProgressStream(update)
+    st.session_state.reviewed = review
+    st.session_state.pop("saved_id", None)
     # Discard the preceding run before starting another one.
     for key in ("result", "trace", "events"):
         st.session_state.pop(key, None)
@@ -78,13 +80,17 @@ def _run(review, *, consent=None, budget=None, demo_root=None):
 
 def _downloads() -> None:
     state = st.session_state.get("result")
-    if state is not None:
+    if state is not None and state.report is not None:
         json_report, markdown = export_report(state)
         st.subheader("诊断报告")
         st.caption("环境数据描述采集时刻；修复执行状态见报告中的验证结果。")
         st.markdown(markdown)
         st.download_button("下载 Markdown", markdown, "report.md", "text/markdown")
         st.download_button("下载 JSON 报告", json_report, "report.json", "application/json")
+    if state is not None:
+        if state.report is None:
+            st.info("此会话尚无诊断报告，可查看和下载取证状态。")
+            st.json(state.model_dump(mode="json"))
         st.download_button(
             "下载完整状态", state.model_dump_json(indent=2), "state.json", "application/json"
         )
@@ -96,7 +102,7 @@ def _downloads() -> None:
 
 def _verification() -> None:
     state = st.session_state.get("result")
-    if state is None or not state.report.fixes:
+    if state is None or state.report is None or not state.report.fixes:
         return
     with st.expander("预置案例修复验证"):
         case = st.selectbox("预置案例", list(PRESETS))
@@ -121,7 +127,8 @@ def _verification() -> None:
                 st.session_state.result = updated
                 st.session_state.trace = stream.getvalue()
                 st.session_state.events = [
-                    json.loads(line) for line in stream.getvalue().splitlines()
+                    TraceEvent.model_validate_json(line).model_dump(mode="json")
+                    for line in stream.getvalue().splitlines()
                 ]
                 st.rerun()
             except (OSError, ValueError):
@@ -132,12 +139,36 @@ def main() -> None:
     st.set_page_config(page_title="DeepDebug", layout="wide")
     st.title("DeepDebug 故障诊断")
     st.caption("本地单用户 · 默认导入故障环境快照 · 日志、代码和配置只作为诊断材料")
+    store = None
+    try:
+        store = SessionStore(Path("sessions"))
+        expired = store.cleanup()
+        if expired:
+            st.info(f"已清理 {len(expired)} 个超过 7 天未保存的会话。")
+    except (OSError, ValueError, KeyError):
+        st.error("本地会话目录无法读取或记录损坏；请检查 sessions 目录。")
+    if store is not None and st.session_state.get("load_session_id"):
+        selected = st.session_state.pop("load_session_id")
+        try:
+            bundle = store.load(selected)
+            st.session_state.result = bundle.state
+            st.session_state.reviewed = bundle.review
+            st.session_state.trace = bundle.trace
+            st.session_state.events = [
+                TraceEvent.model_validate_json(line).model_dump(mode="json")
+                for line in bundle.trace.splitlines()
+            ]
+            st.session_state.saved_id = selected
+            st.session_state.mode = "已保存会话"
+            st.session_state.active_mode = "已保存会话"
+        except (OSError, ValueError, KeyError):
+            st.error("所选会话无法打开。")
     if st.button("清除当前会话"):
         st.session_state.clear()
         st.rerun()
-    mode = st.radio("运行方式", ["上传材料诊断", "离线预置演示"], key="mode")
+    mode = st.radio("运行方式", ["上传材料诊断", "离线预置演示", "已保存会话"], key="mode")
     if st.session_state.get("active_mode") != mode:
-        for key in ("preview", "result", "trace", "events", "input_digest"):
+        for key in ("preview", "reviewed", "result", "trace", "events", "input_digest", "saved_id"):
             st.session_state.pop(key, None)
         st.session_state.active_mode = mode
     ran = False
@@ -157,7 +188,7 @@ def main() -> None:
                 ran = True
             except (OSError, ValueError):
                 st.error("演示材料不可读取；请从项目源码目录启动。")
-    else:
+    elif mode == "上传材料诊断":
         pasted = st.text_area("粘贴日志", key="pasted_log")
         uploaded = []
         for kind, label, extensions, multiple in (
@@ -178,7 +209,7 @@ def main() -> None:
                 digest.update(part)
         signature = digest.hexdigest()
         if st.session_state.get("input_digest") != signature:
-            for key in ("preview", "result", "trace", "events"):
+            for key in ("preview", "reviewed", "result", "trace", "events", "saved_id"):
                 st.session_state.pop(key, None)
             st.session_state.input_digest = signature
         if st.button("生成脱敏预览"):
@@ -236,8 +267,51 @@ def main() -> None:
                     ran = True
                 except ValueError:
                     st.error("模型 ID 或预算配置无效。")
+    else:
+        st.info("从下方保存列表打开会话，查看其材料、报告和轨迹。")
+        if st.session_state.get("reviewed") is not None:
+            for item in st.session_state.reviewed.content.materials:
+                with st.expander(f"已保存材料：{item.artifact.display_name}"):
+                    st.code(item.text, language="text", line_numbers=True)
     if not ran and st.session_state.get("events"):
         st.subheader("工具与决策时间线")
         _timeline(st.session_state.events)
     _verification()
     _downloads()
+    if store is not None:
+        _saved_sessions(store)
+
+
+def _saved_sessions(store: SessionStore) -> None:
+    with st.expander("保存与打开本地会话"):
+        st.caption("会话保存到本机 sessions 目录；从最后保存起保留 7 天，打开页面时清理过期记录。")
+        try:
+            if st.session_state.get("result") is not None and st.button("保存当前会话"):
+                bundle = SavedSession(
+                    saved_at=datetime.now(timezone.utc),
+                    state=st.session_state.result,
+                    review=st.session_state.get("reviewed"),
+                    trace=st.session_state.get("trace", ""),
+                )
+                st.session_state.saved_id = store.save(bundle, st.session_state.get("saved_id"))
+                st.success("会话已保存。")
+            saved = dict(store.list_sessions())
+            if saved:
+                selected = st.selectbox(
+                    "已保存会话",
+                    list(saved),
+                    format_func=lambda key: (
+                        f"{saved[key].saved_at.isoformat()} · {saved[key].state.session_id}"
+                    ),
+                )
+                if st.button("打开选中会话"):
+                    st.session_state.load_session_id = selected
+                    st.rerun()
+                if st.button("删除选中会话"):
+                    store.delete(selected)
+                    if st.session_state.get("saved_id") == selected:
+                        for key in ("result", "reviewed", "trace", "events", "saved_id"):
+                            st.session_state.pop(key, None)
+                    st.rerun()
+        except (OSError, ValueError, KeyError):
+            st.error("会话保存/读取失败，请检查文件权限与状态、确认副本和轨迹的一致性。")

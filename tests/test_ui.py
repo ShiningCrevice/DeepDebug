@@ -144,3 +144,67 @@ def test_ui_verification_appends_trace_and_updates_downloads():
     assert events[-1]["event"] == "verification"
     assert events[-1]["state"] == state.model_dump(mode="json")
     assert [e["sequence"] for e in events] == list(range(1, len(events) + 1))
+
+
+def test_save_reopen_delete_session(tmp_path, monkeypatch):
+    pytest.importorskip("streamlit")
+    from deepdebug.sessions import SessionStore
+    from deepdebug.ui import app as ui_app
+
+    store = SessionStore(tmp_path / "sessions")
+    monkeypatch.setattr(ui_app, "SessionStore", lambda root: store)
+    at = app()
+    at.radio[0].set_value("离线预置演示").run()
+    button(at, "运行依赖案例演示").click().run()
+    state = at.session_state["result"]
+    button(at, "保存当前会话").click().run()
+    assert not at.exception
+    key = at.session_state["saved_id"]
+    assert store.load(key).state == state
+    button(at, "清除当前会话").click().run()
+    assert "result" not in at.session_state
+    button(at, "打开选中会话").click().run()
+    assert not at.exception
+    assert at.radio[0].value == "已保存会话"
+    assert at.session_state["result"] == state
+    assert at.session_state["events"][-1]["state"] == state.model_dump(mode="json")
+    button(at, "删除选中会话").click().run()
+    assert not at.exception and store.list_sessions() == []
+    assert "result" not in at.session_state
+
+
+@pytest.mark.parametrize("with_trace", [False, True])
+def test_open_saved_collection_without_report(tmp_path, monkeypatch, with_trace):
+    pytest.importorskip("streamlit")
+    from datetime import datetime, timezone
+
+    from deepdebug.agent.state import DiagnosisState
+    from deepdebug.sessions import SavedSession, SessionStore
+    from deepdebug.ui import app as ui_app
+
+    store = SessionStore(tmp_path / "sessions")
+    timestamp = datetime.now(timezone.utc)
+    trace = (
+        json.dumps(
+            dict(
+                sequence=1,
+                event="checkpoint",
+                details={},
+                recorded_at=timestamp.isoformat(),
+                session_id="collected",
+                state={"session_id": "collected"},
+            )
+        )
+        if with_trace
+        else ""
+    )
+    store.save(
+        SavedSession(saved_at=timestamp, state=DiagnosisState(session_id="collected"), trace=trace)
+    )
+    monkeypatch.setattr(ui_app, "SessionStore", lambda root: store)
+    at = app()
+    button(at, "打开选中会话").click().run()
+    assert not at.exception
+    assert at.session_state["result"].report is None
+    assert any("尚无诊断报告" in message.value for message in at.info)
+    assert len(at.get("download_button")) == (2 if with_trace else 1)

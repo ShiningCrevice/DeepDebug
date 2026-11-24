@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 20（预置修复验证）：依赖、路径、形状、设备四类固定前后对照通过；422 项测试通过，第 4 周 4/4、完整里程碑 4/6。预置结果不代表用户训练修复，关联报告须核查建议匹配。详情见 `docs/progress.md`。
+- 当前完成 Step 21（本地会话保存与保留期管理）：独立会话保存/打开/删除及访问时 7 天清理可用；439 项测试通过，第 4 周 4/4、完整里程碑 4/6。详情见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步补会话保留/继续诊断，再完成冻结评测与课程交付。`builtin-check` 运行预置案例；`verify-report --matches-preset` 表示已核查建议匹配。页面入口为 `uv run --locked --extra ui streamlit run app.py`，默认仅监听本机。
+- 下一步实现补充材料后继续诊断，再完成冻结评测与课程交付。`sessions` 管理独立本地保存，7 天从最后保存起算，运行时清理；手动 runs/下载文件不自动清理。页面入口为 `uv run --locked --extra ui streamlit run app.py`。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
