@@ -1,11 +1,10 @@
 """Upload-to-review workflow and streaming trace presentation data."""
 
 import io
-import json
 from collections.abc import Callable, Sequence
 from typing import Literal
 
-from deepdebug.agent.state import DiagnosisState
+from deepdebug.agent.trace import TraceEvent
 from deepdebug.security.review import MaterialReview, preview_registry
 from deepdebug.tools.artifacts import MaterialRegistry
 
@@ -37,8 +36,7 @@ class ProgressStream(io.StringIO):
         self.events: list[dict] = []
 
     def write(self, text: str) -> int:
-        entry = json.loads(text)
-        DiagnosisState.model_validate(entry["state"])
+        entry = TraceEvent.model_validate_json(text).model_dump(mode="json")
         self.events.append(entry)
         result = super().write(text)
         self.on_event(entry)

@@ -96,7 +96,7 @@ CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者
 
 `JsonlTrace(stream).write(event, state, details)` 在写入前重校验完整状态，并逐行 flush。每行含递增 `sequence`、带时区 `recorded_at`、`session_id`、`event`、`details` 和完整 `state`。
 
-事件为 start、model_request、model_response、model_error、invalid_decision、decision、tool、stop。start 标注 offline/remote；model_response 记录输入输出用量；model_error 记录固定分类及用量未知标记。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹。`--trace` 仅新建文件，不自动删除，不支持恢复执行。`--root` 的轨迹包含原始材料；`--reviewed` 的材料内容来自脱敏副本，每个状态保留 `material_review_sha256`；云端状态另保留 `cloud_consent`。
+事件为 start、resume、checkpoint、model_request、model_response、model_error、invalid_decision、decision、tool、stop、verification。start/resume 标注 offline/remote；checkpoint 标注缺少旧轨迹时保存的已有状态，verification 记录后置验证结果；model_response 记录输入输出用量；model_error 记录固定分类及用量未知标记。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹。`--trace` 仅新建文件，不自动删除，支持核查历史和追加材料后的显式续跑。`--root` 的轨迹包含原始材料；`--reviewed` 的材料内容来自脱敏副本，每个状态保留 `material_review_sha256`；云端状态另保留 `cloud_consent`。
 
 ## 材料登记
 
@@ -197,3 +197,11 @@ Streamlit 页面使用同一 `diagnose` 和 `replay_reviewed`；外发动作由�
 `SessionStore` 只管理 32 位小写十六进制随机目录 ID。单份会话包最多 128 MiB，文件读写拒绝链接并限制为普通单链接文件。保存既有 ID 时须为同一诊断 session_id；删除要求目录只有有效 session.json。每次保存更新 saved_at；cleanup 删除距最后保存至少 7 天的有效记录，非法记录报错并保留。
 
 `sessions save/list/load/delete/cleanup` 共用该存储，默认 sessions/，可用 --directory 指定专用根目录。CLI 每次操作前先清理过期记录；成功返回 0，文件、结构或引用错误返回 2。save 的 --reviewed/--trace 可选，--id 指定更新已有记录；load 返回整个会话包，不发起诊断。
+
+## 续跑协议
+
+`extend_review(confirmed_review, additions)` 返回 preview，保持旧 PreviewMaterial 前缀完全相同，追加连续材料 ID；首份仍须 log，后续可包含补充日志，合计不超过 10。新增文本使用保留旧别名序号的脱敏器，不推断跨轮原值相等性。
+
+`continue_session(saved, review, history_reviewed, allowance, consent|replay_model)` 要求旧会话有确认副本并已停止，历史已核查，新 review confirmed 且保留旧前缀；云端与回放模型二选一。新增 Budget 不得有已消费计数。状态继续使用相同 session_id，累计已用计数保持，新上限为已用量加本次额度；continued_from_sha256 记录续跑前完整状态摘要，previous_conclusion 保存上一轮摘要/分类/修复/未决问题。
+
+恢复时重新校验登记材料与状态、证据 ID、工具缓存参数、外发授权和最终报告。环境绑定未变时旧工具失败也作为历史缓存保留；新增快照改变绑定或使 ID 歧义时，环境/GPU 调用重新调度。旧报告保留在轨迹，当前报告重新生成；轨迹序号连续，末状态等于保存状态。CLI continue 成功/缺信息/无进展返回 0，运行异常停止返回 1，准备或保存错误返回 2。准备失败不覆盖保存记录。

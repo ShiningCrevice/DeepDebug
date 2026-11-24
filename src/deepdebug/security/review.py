@@ -46,8 +46,6 @@ class ReviewContent(Contract):
         for index, item in enumerate(self.materials, 1):
             if item.artifact.artifact_id != f"A{index:03}":
                 raise ValueError("material IDs must be ordered and unique")
-            if index > 1 and item.artifact.kind == "log":
-                raise ValueError("only one log is supported")
         return self
 
     def digest(self) -> str:
@@ -115,6 +113,35 @@ def confirm_materials(review: MaterialReview) -> MaterialReview:
         status="confirmed",
         confirmed_at=datetime.now(timezone.utc),
     )
+
+
+def extend_review(review: MaterialReview, additions: MaterialRegistry) -> MaterialReview:
+    """Append new previews without changing previously confirmed IDs, text or timestamps."""
+    review = MaterialReview.model_validate(review)
+    if review.status != "confirmed":
+        raise ValueError("只能补充已确认材料。")
+    originals = [additions.get(a.artifact_id) for a in additions.artifacts()]
+    redactor = Redactor(
+        (item.text for item in originals),
+        reserved_texts=(item.text for item in review.content.materials),
+    )
+    materials = list(review.content.materials)
+    for item in originals:
+        text = redactor.redact(item.text)
+        artifact_id = f"A{len(materials) + 1:03}"
+        artifact = Artifact.model_validate(
+            {
+                **item.artifact.model_dump(),
+                "artifact_id": artifact_id,
+                "display_name": artifact_id + Path(item.artifact.display_name).suffix,
+                "size_bytes": len(text.encode("utf-8")),
+            }
+        )
+        materials.append(
+            PreviewMaterial(artifact=artifact, text=text, registered_at=item.registered_at)
+        )
+    content = ReviewContent(materials=materials)
+    return MaterialReview(content=content, sha256=content.digest())
 
 
 def save_review(path: Path, review: MaterialReview) -> None:

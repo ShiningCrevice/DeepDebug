@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from deepdebug.agent.actions import Action
+from deepdebug.agent.decision import Conclusion
 from deepdebug.agent.schemas import (
     Artifact,
     CloudConsent,
@@ -52,6 +53,8 @@ class DiagnosisState(Contract):
     session_id: Text
     inputs: list[Artifact] = Field(default_factory=list, max_length=10)
     material_review_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    continued_from_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    previous_conclusion: Conclusion | None = None
     cloud_consent: CloudConsent | None = None
     target_environment: TargetEnvironment | None = None
     error_summary: Text | None = None

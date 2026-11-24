@@ -46,9 +46,24 @@ class Redactor:
     The original-to-alias map lives only in memory and is never serialized.
     """
 
-    def __init__(self, texts: Iterable[str], *, secrets: Iterable[str] = ()):
+    def __init__(
+        self,
+        texts: Iterable[str],
+        *,
+        secrets: Iterable[str] = (),
+        reserved_texts: Iterable[str] = (),
+    ):
         self._replacements: dict[str, str] = {}
         self._counts: dict[str, int] = {}
+        for text in reserved_texts:
+            for kind, pattern in (
+                ("SECRET", r"\[REDACTED_SECRET_(\d+)\]"),
+                ("HOME", r"/redacted/home_(\d+)"),
+            ):
+                self._counts[kind] = max(
+                    self._counts.get(kind, 0),
+                    max((int(number) for number in re.findall(pattern, text)), default=0),
+                )
         for secret in secrets:
             self._add(secret, "SECRET")
         texts = list(texts)

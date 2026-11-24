@@ -13,12 +13,14 @@ from dotenv import load_dotenv
 from deepdebug.agent.schemas import CloudConsent
 from deepdebug.agent.state import Budget
 from deepdebug.agent.trace import JsonlTrace, TraceEvent
+from deepdebug.continuation import continue_session
 from deepdebug.diagnosis import diagnose
 from deepdebug.replay import load_replay, replay_reviewed
 from deepdebug.reporting.render import export_report
 from deepdebug.security.destination import DEFAULT_BASE_URL, responses_endpoint
-from deepdebug.security.review import confirm_materials, preview_materials
+from deepdebug.security.review import confirm_materials, extend_review, preview_materials
 from deepdebug.sessions import SavedSession, SessionStore
+from deepdebug.tools.artifacts import MaterialRegistry
 from deepdebug.tools.builtin_checks import PRESETS
 from deepdebug.ui.workflow import ProgressStream, preview_uploads
 from deepdebug.verification import verify_report
@@ -135,6 +137,129 @@ def _verification() -> None:
                 st.error("预置检查失败，请检查执行环境与当前报告。")
 
 
+def _cloud_options(prefix: str):
+    load_dotenv(Path.cwd() / ".env", override=False)
+    base_url = st.text_input(
+        "API 基础地址",
+        value=os.environ.get("OPENAI_BASE_URL", DEFAULT_BASE_URL),
+        key=f"{prefix}_base",
+    )
+    model = st.text_input("模型 ID", key=f"{prefix}_model")
+    try:
+        endpoint = responses_endpoint(base_url)
+        st.text(f"发送目的地：{endpoint}")
+        if endpoint.startswith("http://"):
+            st.warning("该 HTTP 地址会明文传输凭据和材料。")
+    except ValueError:
+        endpoint = None
+        st.error("API 基础地址无效。")
+    with st.expander("本轮新增调用预算"):
+        decisions = st.number_input("最多决策次数", min_value=1, value=6, key=f"{prefix}_decisions")
+        tools = st.number_input("最多工具次数", min_value=1, value=8, key=f"{prefix}_tools")
+        tokens = st.number_input(
+            "总 token 上限（含 5,000 报告预留）",
+            min_value=5000,
+            value=50000,
+            key=f"{prefix}_tokens",
+        )
+        seconds = st.number_input("总时限（秒）", min_value=1, value=120, key=f"{prefix}_seconds")
+    return (
+        model,
+        endpoint,
+        Budget(
+            max_decision_calls=decisions,
+            max_tool_calls=tools,
+            max_tokens=tokens,
+            max_duration_seconds=seconds,
+        ),
+    )
+
+
+def _continue_saved(store: SessionStore) -> None:
+    state = st.session_state.get("result")
+    review = st.session_state.get("reviewed")
+    if state is None or state.stop_reason is None or review is None:
+        return
+    with st.expander("补充材料并继续诊断"):
+        uploads = []
+        for kind, suffixes in (
+            ("log", ["log", "txt"]),
+            ("code", ["py"]),
+            ("config", ["json", "yaml", "yml"]),
+            ("snapshot", ["json"]),
+        ):
+            for uploaded in st.file_uploader(
+                f"补充 {kind}", type=suffixes, accept_multiple_files=True, key=f"resume_{kind}"
+            ):
+                uploads.append((uploaded.name, uploaded.getvalue(), kind))
+        digest = hashlib.sha256(state.model_dump_json().encode())
+        for name, content, kind in uploads:
+            for part in (name.encode(), content, kind.encode()):
+                digest.update(len(part).to_bytes(8, "big"))
+                digest.update(part)
+        signature = digest.hexdigest()
+        if st.session_state.get("resume_signature") != signature:
+            st.session_state.pop("resume_preview", None)
+            st.session_state.resume_signature = signature
+        if st.button("生成续跑预览"):
+            try:
+                registry = MaterialRegistry()
+                for name, content, kind in uploads:
+                    registry.register_bytes(name, content, kind)
+                st.session_state.resume_preview = extend_review(review, registry)
+            except ValueError:
+                st.error("补充材料无效；合计最多 10 份，每份不超过 2 MiB。")
+        preview = st.session_state.get("resume_preview")
+        if preview is None:
+            return
+        st.caption("核查历史状态中的证据和判断，以及下列全部材料；它们会用于续跑并发送至所选服务。")
+        st.json(state.model_dump(mode="json"))
+        for item in preview.content.materials:
+            st.code(item.text, language="text", line_numbers=True)
+        reviewed = st.checkbox(
+            "已核查历史状态与全部续跑材料", key=f"resume_review_{signature}_{preview.sha256}"
+        )
+        model, endpoint, allowance = _cloud_options("resume")
+        if st.button("授权发送并继续诊断", disabled=not (reviewed and model and endpoint)):
+            try:
+                consent = CloudConsent(
+                    material_review_sha256=preview.sha256,
+                    endpoint=endpoint,
+                    model=model,
+                    confirmed_at=datetime.now(timezone.utc),
+                )
+                saved = SavedSession(
+                    saved_at=datetime.now(timezone.utc),
+                    state=state,
+                    review=review,
+                    trace=st.session_state.get("trace", ""),
+                )
+                progress = st.empty()
+                stream = ProgressStream(
+                    lambda entry: progress.info(
+                        f"续跑阶段：{entry['event']} · 证据 {len(entry['state']['evidence'])} 条"
+                    )
+                )
+                continued = continue_session(
+                    saved,
+                    confirm_materials(preview),
+                    history_reviewed=True,
+                    consent=consent,
+                    allowance=allowance,
+                    trace_stream=stream,
+                )
+                storage_id = store.save(continued, st.session_state.get("saved_id"))
+                st.session_state.result = continued.state
+                st.session_state.reviewed = continued.review
+                st.session_state.trace = continued.trace
+                st.session_state.events = stream.events
+                st.session_state.saved_id = storage_id
+                st.session_state.pop("resume_preview", None)
+                st.rerun()
+            except (OSError, ValueError):
+                st.error("续跑失败；检查材料核查、模型、目的地和预算。原保存记录仍保留。")
+
+
 def main() -> None:
     st.set_page_config(page_title="DeepDebug", layout="wide")
     st.title("DeepDebug 故障诊断")
@@ -229,26 +354,7 @@ def main() -> None:
                 ):
                     st.code(item.text, language="text", line_numbers=True)
             reviewed = st.checkbox("我已核查全部脱敏内容与材料范围", key=f"review_{preview.sha256}")
-            load_dotenv(Path.cwd() / ".env", override=False)
-            base_url = st.text_input(
-                "API 基础地址", value=os.environ.get("OPENAI_BASE_URL", DEFAULT_BASE_URL)
-            )
-            model = st.text_input("模型 ID")
-            try:
-                endpoint = responses_endpoint(base_url)
-                st.text(f"发送目的地：{endpoint}")
-                if endpoint.startswith("http://"):
-                    st.warning("该 HTTP 地址会明文传输凭据和材料。")
-            except ValueError:
-                endpoint = None
-                st.error("API 基础地址无效。")
-            with st.expander("调用预算"):
-                decisions = st.number_input("最多决策次数", min_value=1, value=6)
-                tools = st.number_input("最多工具次数", min_value=1, value=8)
-                tokens = st.number_input(
-                    "总 token 上限（含 5,000 报告预留）", min_value=5000, value=50000
-                )
-                seconds = st.number_input("总时限（秒）", min_value=1, value=120)
+            model, endpoint, budget = _cloud_options("diagnosis")
             if st.button("授权发送并开始诊断", disabled=not (reviewed and endpoint and model)):
                 try:
                     consent = CloudConsent(
@@ -256,12 +362,6 @@ def main() -> None:
                         endpoint=endpoint,
                         model=model,
                         confirmed_at=datetime.now(timezone.utc),
-                    )
-                    budget = Budget(
-                        max_decision_calls=decisions,
-                        max_tool_calls=tools,
-                        max_tokens=tokens,
-                        max_duration_seconds=seconds,
                     )
                     _run(confirm_materials(preview), consent=consent, budget=budget)
                     ran = True
@@ -279,6 +379,8 @@ def main() -> None:
     _verification()
     _downloads()
     if store is not None:
+        if mode == "已保存会话":
+            _continue_saved(store)
         _saved_sessions(store)
 
 

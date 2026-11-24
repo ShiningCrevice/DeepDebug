@@ -39,11 +39,39 @@ class ToolDispatcher:
         for environment_id in ambiguous:
             del self.environments[environment_id]
         # Identity comes from the selected snapshot, independently of model tool choices.
-        if target is not None and target.environment_id not in ambiguous:
-            self.session.state = DiagnosisState.model_validate(
-                {**self.session.state.model_dump(), "target_environment": target}
-            )
+        self.session.state = DiagnosisState.model_validate(
+            {
+                **self.session.state.model_dump(),
+                "target_environment": target
+                if target is not None and target.environment_id not in ambiguous
+                else None,
+            }
+        )
         self._cache: dict[str, ToolResult] = {}
+        for record in session.state.tool_history:
+            try:
+                saved = json.loads(record.arguments_summary)
+                if not isinstance(saved, list) or len(saved) != 2 or saved[0] != record.tool:
+                    continue
+                action = ACTION_ADAPTER.validate_python(
+                    {
+                        "action": "tool",
+                        "tool": record.tool,
+                        "arguments": saved[1],
+                        "purpose": record.purpose,
+                    }
+                )
+                if action.tool in {"inspect_environment", "query_gpu"}:
+                    bound = self.environments.get(action.arguments.environment_id)
+                    source = record.result.source
+                    if source.kind in {"snapshot", "artifact"}:
+                        if source.id != bound:
+                            continue
+                    elif bound is not None:
+                        continue
+                self._cache[self.key(action)] = ToolResult.model_validate(record.result)
+            except ValueError:
+                continue
 
     @staticmethod
     def key(action: ToolAction) -> str:

@@ -49,11 +49,15 @@ class ObservationFailure(Exception):
 
 
 class CollectionSession:
-    def __init__(self, materials: MaterialRegistry):
+    def __init__(self, materials: MaterialRegistry, state: DiagnosisState | None = None):
         self.materials = materials
-        self.evidence = EvidenceRegistry()
-        self.state = DiagnosisState(session_id=uuid4().hex, inputs=materials.artifacts())
-        self._started = monotonic()
+        self.state = DiagnosisState.model_validate(
+            state or DiagnosisState(session_id=uuid4().hex, inputs=materials.artifacts())
+        )
+        if self.state.inputs != materials.artifacts():
+            raise ValueError("恢复状态必须匹配登记材料。")
+        self.evidence = EvidenceRegistry(self.state.evidence)
+        self._started = monotonic() - self.state.budget.elapsed_ms / 1000
         self._documents: DocumentIndex | None = None
 
     def _run(
@@ -113,8 +117,11 @@ class CollectionSession:
             entry = candidate_evidence.register(**observation)
             if entry.evidence_id not in evidence_ids:
                 evidence_ids.append(entry.evidence_id)
+        next_call = (
+            max((int(r.result.tool_call_id[1:]) for r in self.state.tool_history), default=0) + 1
+        )
         result = ToolResult(
-            tool_call_id=f"T{len(self.state.tool_history) + 1:03}",
+            tool_call_id=f"T{next_call:03}",
             status=status,
             data=data,
             evidence_ids=evidence_ids,

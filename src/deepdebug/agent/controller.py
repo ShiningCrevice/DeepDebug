@@ -119,25 +119,26 @@ class Controller:
         self._event("stop", reason=reason)
         return DiagnosisState.model_validate(self.state)
 
-    def run(self, log_artifact_id: str) -> DiagnosisState:
+    def run(self, log_artifact_id: str, *, resume: bool = False) -> DiagnosisState:
         DiagnosisState.model_validate(self.state)
-        if self.state.stop_reason is not None or self.state.tool_history:
-            raise ValueError("控制器需要新登记的会话；续跑尚未实现。")
-        self._event("start", mode=self.model.transport)
+        if self.state.stop_reason is not None or (self.state.tool_history and not resume):
+            raise ValueError("控制器需要新登记或经过续跑准备的会话。")
+        self._event("resume" if resume else "start", mode=self.model.transport)
         if self._exhausted():
             return self._stop("budget_exhausted", questions=["资源预算不足，尚未完成取证。"])
-        initial = ParseLogAction(
-            tool="parse_log",
-            arguments=ParseLogArguments(artifact_id=log_artifact_id),
-            purpose="首轮固定解析失败日志。",
-        )
-        result, _ = self.dispatcher.dispatch(initial)
-        self._event(
-            "tool",
-            action=initial.model_dump(mode="json"),
-            tool_call_id=result.tool_call_id,
-            cached=False,
-        )
+        if not resume:
+            initial = ParseLogAction(
+                tool="parse_log",
+                arguments=ParseLogArguments(artifact_id=log_artifact_id),
+                purpose="首轮固定解析失败日志。",
+            )
+            result, _ = self.dispatcher.dispatch(initial)
+            self._event(
+                "tool",
+                action=initial.model_dump(mode="json"),
+                tool_call_id=result.tool_call_id,
+                cached=False,
+            )
         correction = None
         repaired = False
         retried = False

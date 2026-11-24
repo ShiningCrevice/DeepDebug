@@ -208,3 +208,62 @@ def test_open_saved_collection_without_report(tmp_path, monkeypatch, with_trace)
     assert at.session_state["result"].report is None
     assert any("尚无诊断报告" in message.value for message in at.info)
     assert len(at.get("download_button")) == (2 if with_trace else 1)
+
+
+def test_saved_session_continuation_reviews_new_scope(tmp_path, monkeypatch):
+    pytest.importorskip("streamlit")
+    from deepdebug.continuation import continue_session
+    from deepdebug.llm.client import ModelResponse, ReplayModelClient
+    from deepdebug.sessions import SessionStore
+    from deepdebug.ui import app as ui_app
+
+    store = SessionStore(tmp_path / "sessions")
+    monkeypatch.setattr(ui_app, "SessionStore", lambda root: store)
+    calls = []
+
+    def offline_continue(saved, review, **kwargs):
+        calls.append(kwargs.pop("consent"))
+        replay = ReplayModelClient(
+            [
+                ModelResponse(
+                    content=json.dumps(
+                        dict(
+                            observation="已收到补充材料。",
+                            hypotheses=[],
+                            action=dict(
+                                action="need_info",
+                                questions=["请提供运行时信息。"],
+                                reason="仍有缺口。",
+                            ),
+                        )
+                    )
+                )
+            ]
+        )
+        return continue_session(saved, review, replay_model=replay, **kwargs)
+
+    monkeypatch.setattr(ui_app, "continue_session", offline_continue)
+    at = app()
+    at.radio[0].set_value("离线预置演示").run()
+    button(at, "运行依赖案例演示").click().run()
+    button(at, "保存当前会话").click().run()
+    before = at.session_state["result"]
+    key = at.session_state["saved_id"]
+    button(at, "打开选中会话").click().run()
+    next(f for f in at.file_uploader if f.label == "补充 config").upload(
+        "extra.json", b'{"width":4}'
+    ).run()
+    button(at, "生成续跑预览").click().run()
+    assert button(at, "授权发送并继续诊断").disabled
+    next(c for c in at.checkbox if c.label == "已核查历史状态与全部续跑材料").check().run()
+    at.text_input[0].set_value("https://example.com/v1").run()
+    at.text_input[1].set_value("test-model").run()
+    button(at, "授权发送并继续诊断").click().run()
+    assert not at.exception
+    updated = store.load(key)
+    assert len(updated.state.inputs) == len(before.inputs) + 1
+    assert updated.state.session_id == before.session_id
+    assert updated.state.budget.decision_calls == before.budget.decision_calls + 1
+    assert calls[0].material_review_sha256 == updated.review.sha256
+    assert calls[0].endpoint == "https://example.com/v1/responses"
+    assert at.session_state["events"][-1]["state"] == updated.state.model_dump(mode="json")

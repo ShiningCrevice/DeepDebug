@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 21（本地会话保存与保留期管理）：独立会话保存/打开/删除及访问时 7 天清理可用；439 项测试通过，第 4 周 4/4、完整里程碑 4/6。详情见 `docs/progress.md`。
+- 当前完成 Step 22（补充材料后继续诊断）：旧材料与证据保留，追加范围和历史重新核查后继续，累计用量与轨迹保留；450 项测试通过，完整里程碑 4/6。详情见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步实现补充材料后继续诊断，再完成冻结评测与课程交付。`sessions` 管理独立本地保存，7 天从最后保存起算，运行时清理；手动 runs/下载文件不自动清理。页面入口为 `uv run --locked --extra ui streamlit run app.py`。
+- 下一步扩充并冻结 benchmark，完成 B0/B1/A 评测与课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
@@ -30,7 +30,7 @@
 - `scripts/capture_dependency_cases.py` 和 `scripts/capture_failure_cases.py` 是开发用固定采集脚本，不是 Agent 工具。后者显式选择解释器和案例，配额 OOM 固定申请 64 MiB，不等同于整卡显存耗尽；缺少环境不生成案例。参考状态/报告位于 `benchmark/gold/dev/`，均为人工编写，修复未执行。
 - `snapshot` / `scripts/collect_environment.py` 由用户显式选择解释器采集；`--torch-cuda`、`--gpu` 可选。`collect` 只读取环境快照；路径检查来自本机 `collector`，不能当成目标快照环境的文件状态。真实 PyTorch/CUDA 可用性已采集；当前 WSL 的 nvidia-smi 不在系统默认搜索路径，自动 GPU 显存摘要仍不可用。
 
-- `collect` 是宿主驱动的只读取证；`replay` 执行离线控制循环。工具成功不能当成诊断或修复成功。`collect` 与 `replay --root` 保持未脱敏的 `pending` 材料；`replay --reviewed` 与 `diagnose` 只读取确认副本，材料为 `reviewed`，状态和轨迹记录确认摘要。自动规则须人工核查；已确认流程不接受追加原始材料或本机路径。
+- `collect` 是宿主驱动的只读取证；`replay` 执行离线控制循环。工具成功不能当成诊断或修复成功。`collect` 与 `replay --root` 保持未脱敏的 `pending` 材料；`replay --reviewed` 与 `diagnose` 只读取确认副本，材料为 `reviewed`，状态和轨迹记录确认摘要。自动规则须人工核查；单次已确认运行不接受原始材料或本机路径；续跑须先通过 extend-preview 追加，再核查、confirm 和授权。
 - 模型访问使用绑定当前 dispatcher 的 Responses 适配器。地址优先级为 `--base-url`、`OPENAI_BASE_URL`、OpenAI 默认地址；最终地址须与 `--send-to` 一致，运行中不改目的地、不跟随重定向。密钥仅从 `OPENAI_API_KEY` 读取；地址接受 HTTP/HTTPS，不含凭据、查询参数或片段。请求与响应在边界脱敏，供应商错误正文不落盘；用量缺失或网络异常时 `budget.usage_complete=false`，已知 token 合计不能冒充完整费用统计。HTTP 固定响应测试不计为真实模型诊断。
 - 安全材料读取需要 POSIX `dir_fd/O_NOFOLLOW`；所有链接均拒绝。工具读取登记时固定的内容，保证行号和证据一致。
 - 文档检索只读取 `src/deepdebug/knowledge/documents.json` 的随包副本，来源清单见 `knowledge/README.md`；不得索引仓库或 gold。固定包目录可位于隐藏的虚拟环境目录，用户材料仍拒绝隐藏路径。文档是带版本与整理时间的人工摘要，只能提供一般规则。

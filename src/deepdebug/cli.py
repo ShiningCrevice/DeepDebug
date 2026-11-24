@@ -18,19 +18,22 @@ from deepdebug.agent.decision import Decision
 from deepdebug.agent.schemas import Category, CloudConsent, DiagnosisReport, EnvironmentSnapshot
 from deepdebug.agent.state import Budget, DiagnosisState
 from deepdebug.collection import collect, search_documents
+from deepdebug.continuation import continue_session
 from deepdebug.diagnosis import diagnose
 from deepdebug.replay import load_replay, replay, replay_reviewed
 from deepdebug.reporting.render import check_report_files, export_report, load_state, save_export
 from deepdebug.security.destination import DEFAULT_BASE_URL, responses_endpoint
-from deepdebug.security.paths import MaterialError
+from deepdebug.security.paths import AuthorizedRoot, MaterialError
 from deepdebug.security.review import (
     MaterialReview,
     confirm_materials,
+    extend_review,
     load_review,
     preview_materials,
     save_review,
 )
 from deepdebug.sessions import SavedSession, SessionStore
+from deepdebug.tools.artifacts import MaterialRegistry
 from deepdebug.tools.builtin_checks import PHASES, PRESETS, run_builtin_check
 from deepdebug.tools.capture import CaptureError, capture_environment
 from deepdebug.verification import verify_report
@@ -86,6 +89,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     sessions.add_argument("--state", type=Path, help="save 时读取的完整状态")
     sessions.add_argument("--reviewed", type=Path, help="save 时保存的已确认副本")
     sessions.add_argument("--trace", type=Path, help="save 时保存的 JSONL 轨迹")
+    extend = commands.add_parser("extend-preview", help="保留已保存会话副本，预览新增材料")
+    extend.add_argument("--session", required=True)
+    extend.add_argument("--directory", type=Path, default=Path("sessions"))
+    extend.add_argument("--root", type=Path, required=True)
+    for kind in ("log", "code", "config", "snapshot"):
+        extend.add_argument(f"--{kind}", action="append", default=[])
+    extend.add_argument("--output", type=Path, required=True)
+    resume = commands.add_parser("continue", help="重新核查历史与材料后继续已保存诊断")
+    resume.add_argument("--session", required=True)
+    resume.add_argument("--directory", type=Path, default=Path("sessions"))
+    resume.add_argument("--reviewed", type=Path, required=True)
+    resume.add_argument(
+        "--review-history", action="store_true", help="确认已核查保存状态中的历史证据与判断"
+    )
+    resume_model = resume.add_mutually_exclusive_group(required=True)
+    resume_model.add_argument("--responses", type=Path, help="离线固定响应")
+    resume_model.add_argument("--model", help="授权使用的云端模型")
+    resume.add_argument("--send-to")
+    resume.add_argument("--base-url")
+    resume.add_argument("--max-decisions", type=int, default=6)
+    resume.add_argument("--max-tools", type=int, default=8)
+    resume.add_argument("--max-tokens", type=int, default=50000)
+    resume.add_argument("--max-seconds", type=int, default=120)
     preview = commands.add_parser("preview", help="预览显式材料的脱敏副本，保存待确认 JSON")
     preview.add_argument("--root", type=Path, required=True, help="独立材料目录")
     preview.add_argument("--log", required=True)
@@ -154,6 +180,81 @@ def main(argv: Sequence[str] | None = None) -> int:
     collection.add_argument("--docs-query", help="追加一次本地文档检索，最多返回 3 条")
     collection.add_argument("--docs-category", choices=get_args(Category), help="文档故障类别过滤")
     args = parser.parse_args(argv)
+    if args.command in {"extend-preview", "continue"}:
+        try:
+            store = SessionStore(args.directory)
+            store.cleanup()
+            saved = store.load(args.session)
+            if saved.review is None:
+                raise ValueError("保存会话没有已确认副本。")
+            if args.command == "extend-preview":
+                additions = MaterialRegistry()
+                if (
+                    len(saved.review.content.materials)
+                    + sum(
+                        len(getattr(args, kind)) for kind in ("log", "code", "config", "snapshot")
+                    )
+                    > 10
+                ):
+                    raise ValueError("补充后超过 10 份材料。")
+                with AuthorizedRoot(args.root) as root:
+                    for kind in ("log", "code", "config", "snapshot"):
+                        for name in getattr(args, kind):
+                            additions.register(root, name, kind)
+                preview = extend_review(saved.review, additions)
+                save_review(args.output, preview)
+                print(preview.model_dump_json(indent=2))
+            else:
+                review = load_review(args.reviewed)
+                consent = None
+                model = load_replay(args.responses) if args.responses else None
+                if args.model:
+                    load_dotenv(Path.cwd() / ".env", override=False)
+                    endpoint = responses_endpoint(
+                        args.base_url
+                        if args.base_url is not None
+                        else os.environ.get("OPENAI_BASE_URL", DEFAULT_BASE_URL)
+                    )
+                    consent = CloudConsent(
+                        material_review_sha256=review.sha256,
+                        endpoint=args.send_to,
+                        model=args.model,
+                        confirmed_at=datetime.now(timezone.utc),
+                    )
+                    if consent.endpoint != endpoint:
+                        raise ValueError("发送目的地不匹配。")
+                    _show_materials(review)
+                    print(
+                        f"发送至：{consent.endpoint}；包括已核查的历史证据与判断。", file=sys.stderr
+                    )
+                allowance = Budget(
+                    max_decision_calls=args.max_decisions,
+                    max_tool_calls=args.max_tools,
+                    max_tokens=args.max_tokens,
+                    max_duration_seconds=args.max_seconds,
+                )
+                continued = continue_session(
+                    saved,
+                    review,
+                    history_reviewed=args.review_history,
+                    allowance=allowance,
+                    consent=consent,
+                    replay_model=model,
+                )
+                store.save(continued, args.session)
+                print(continued.state.model_dump_json(indent=2))
+                return (
+                    0
+                    if continued.state.stop_reason in {"completed", "need_info", "no_progress"}
+                    else 1
+                )
+        except (OSError, ValueError, KeyError, RecursionError):
+            print(
+                "续跑准备失败：检查保存会话、确认材料、历史核查、目的地与新增预算。",
+                file=sys.stderr,
+            )
+            return 2
+        return 0
     if args.command == "sessions":
         try:
             store = SessionStore(args.directory)
@@ -164,7 +265,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 trace_text = ""
                 if args.trace is not None:
                     from deepdebug.reporting.render import MAX_STATE_BYTES
-                    from deepdebug.security.paths import AuthorizedRoot
 
                     with AuthorizedRoot(args.trace.absolute().parent) as root:
                         trace_text = root.read(args.trace.name, max_bytes=MAX_STATE_BYTES).decode(
