@@ -1,0 +1,19 @@
+{
+  "case_id": "test_info_snapshots",
+  "family_id": "ambiguous_snapshot_identity",
+  "split": "test",
+  "category": "dependency",
+  "group": "insufficient",
+  "materials": [
+    "materials/log.txt",
+    "materials/config.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:29:15.352379+00:00",
+    "synthetic": true,
+    "paths_redacted": true,
+    "capture_method": "manual_scenario",
+    "exit_code": null,
+    "scope": "人工构造情境，非真实训练结果。"
+  }
+}

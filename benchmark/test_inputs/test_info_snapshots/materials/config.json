@@ -1,0 +1,10 @@
+{
+  "snapshot_a": {
+    "id": "TRAIN",
+    "package": "1.0"
+  },
+  "snapshot_b": {
+    "id": "TRAIN",
+    "package": "2.0"
+  }
+}

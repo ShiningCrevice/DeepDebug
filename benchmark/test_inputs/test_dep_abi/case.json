@@ -1,0 +1,20 @@
+{
+  "case_id": "test_dep_abi",
+  "family_id": "extension_abi_mismatch",
+  "split": "test",
+  "category": "dependency",
+  "group": "common",
+  "materials": [
+    "materials/log.txt",
+    "materials/case.py",
+    "materials/config.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:29:08.484563+00:00",
+    "synthetic": true,
+    "paths_redacted": true,
+    "capture_method": "manual_scenario",
+    "exit_code": null,
+    "scope": "人工构造情境，非真实训练结果。"
+  }
+}

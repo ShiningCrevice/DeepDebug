@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+ImportError: cannot import name 'Mapping' from 'collections' (/usr/lib/python3.12/collections/__init__.py)
+python= 3.12.3

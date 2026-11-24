@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 22（补充材料后继续诊断）：旧材料与证据保留，追加范围和历史重新核查后继续，累计用量与轨迹保留；450 项测试通过，完整里程碑 4/6。详情见 `docs/progress.md`。
+- 当前完成 Step 23（评测集扩充与冻结）：10 个开发案例、30 个测试案例，来源分组、标签证据及案例族隔离校验通过；465 项测试通过，完整里程碑 4/6。详情见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步扩充并冻结 benchmark，完成 B0/B1/A 评测与课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
+- 下一步实现并执行 B0/B1/A 评测，人工评分后完成课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
@@ -26,7 +26,7 @@
 - 完成修改后执行 `uv run --locked ruff check .`、`uv run --locked ruff format --check .` 和相关 pytest；包配置变动时执行 `uv build`。
 - 控制器测试使用固定模型响应，不依赖付费 API；优先验证协议、权限、预算和证据正确性。
 - 协议见 `docs/tool-api.md`。在持久化、工具调度和报告输出边界重新校验完整状态；直接修改模型中的列表或使用 `model_copy(update=...)` 不保证经过校验。
-- `benchmark/dev/*/materials/` 是输入数据，不用 Ruff 自动改写其中的 Python 案例。两个依赖案例同属 `dependency_interpreter` 案例族，只留在开发集。
+- `benchmark/**/materials/` 是输入数据，不用 Ruff 自动改写其中的 Python 案例。两个依赖案例同属 `dependency_interpreter` 案例族，只留在开发集。
 - `scripts/capture_dependency_cases.py` 和 `scripts/capture_failure_cases.py` 是开发用固定采集脚本，不是 Agent 工具。后者显式选择解释器和案例，配额 OOM 固定申请 64 MiB，不等同于整卡显存耗尽；缺少环境不生成案例。参考状态/报告位于 `benchmark/gold/dev/`，均为人工编写，修复未执行。
 - `snapshot` / `scripts/collect_environment.py` 由用户显式选择解释器采集；`--torch-cuda`、`--gpu` 可选。`collect` 只读取环境快照；路径检查来自本机 `collector`，不能当成目标快照环境的文件状态。真实 PyTorch/CUDA 可用性已采集；当前 WSL 的 nvidia-smi 不在系统默认搜索路径，自动 GPU 显存摘要仍不可用。
 

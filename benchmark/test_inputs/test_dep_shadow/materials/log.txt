@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "<string>", line 6, in <module>
+AttributeError: module 'numpy' has no attribute 'array'
+numpy_file= /demo/case/numpy.py

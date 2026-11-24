@@ -1,0 +1,4 @@
+{
+  "optimizer": "AdamW",
+  "first_step": true
+}

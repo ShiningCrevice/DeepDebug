@@ -1,0 +1,18 @@
+{
+  "case_id": "test_out_driver",
+  "family_id": "driver_initialization_failure",
+  "split": "test",
+  "category": "out_of_scope",
+  "group": "out_of_scope",
+  "materials": [
+    "materials/log.txt"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:29:15.355015+00:00",
+    "synthetic": true,
+    "paths_redacted": true,
+    "capture_method": "manual_scenario",
+    "exit_code": null,
+    "scope": "人工构造情境，非真实训练结果。"
+  }
+}

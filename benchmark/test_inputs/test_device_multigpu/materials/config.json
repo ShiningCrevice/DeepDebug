@@ -1,0 +1,4 @@
+{
+  "left_device": "cuda:0",
+  "right_device": "cuda:1"
+}

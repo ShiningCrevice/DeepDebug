@@ -1,0 +1,3 @@
+trial batch=16 forward=ok peak=1.8GiB
+trial batch=128 forward=failed
+RuntimeError: CUDA out of memory. Tried to allocate 6.00 GiB; free 3.00 GiB

@@ -1,0 +1,20 @@
+{
+  "case_id": "oom_002",
+  "family_id": "retained_training_graph",
+  "split": "dev",
+  "category": "cuda_oom",
+  "group": "common",
+  "materials": [
+    "materials/log.txt",
+    "materials/case.py",
+    "materials/config.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:28:58.928464+00:00",
+    "synthetic": true,
+    "paths_redacted": true,
+    "capture_method": "manual_scenario",
+    "exit_code": null,
+    "scope": "人工构造情境，非真实训练结果。"
+  }
+}

@@ -1,0 +1,2 @@
+torch=2.9.1 extension_build_torch=2.1.0
+ImportError: fast_tensor_extension.so: undefined symbol: _ZN3c1017RegisterOperatorsD1Ev

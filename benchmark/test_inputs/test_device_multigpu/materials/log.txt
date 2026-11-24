@@ -1,0 +1,2 @@
+left.device=cuda:0 right.device=cuda:1
+RuntimeError: Expected all tensors to be on the same device, but found cuda:0 and cuda:1

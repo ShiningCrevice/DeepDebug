@@ -44,3 +44,14 @@ OOM 使用 [PyTorch 进程显存配额 API](https://docs.pytorch.org/docs/2.9/ge
 每个故障子进程限时 15 秒，合并输出上限 64 KiB；超时或超限后回收该子进程。只有实际非零退出并匹配预期错误的结果才生成案例。缺少环境、超时及其他失败写入 `capture_summary.json`，不会生成占位日志或标成已采集。退出码 `0` 表示所选案例均已采集，`1` 表示有案例未取得预期失败，`2` 表示参数或输出路径错误。汇总仅供本地查看。
 
 新采集结果不会自动覆盖仓库案例或生成人工参考答案；失败采集也不代表修复验证。该脚本仅供开发准备案例，不是 Agent 工具。
+
+## 扩充 benchmark
+
+`build_benchmark.py` 定义额外 34 个固定案例：17 个真实最小程序失败和 17 个人工情境。与原六例合并后得到 10 个开发案例、30 个测试案例。
+
+```bash
+uv run --locked python scripts/build_benchmark.py runs/benchmark-capture \
+  --python /absolute/target-env/bin/python
+```
+
+目标解释器需准备 PyTorch、NumPy、可用 CUDA，且不安装 tensorboard；标准库 API 案例要求已移除 `collections.Mapping` 的 Python。采集脚本只执行自身固定代码，不执行材料目录文件；每次真实进程最多 15 秒、64 KiB 输出，并核对预期错误。人工情境直接生成并标为 synthetic。输出目录必须不存在；异常时保留已完成输出供检查。生成的独立 gold 文件由开发者合并到统一 labels.json，校验通过后冻结，不自动改动仓库。

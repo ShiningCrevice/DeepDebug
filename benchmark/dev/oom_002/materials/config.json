@@ -1,0 +1,4 @@
+{
+  "gpu_total_mib": 8192,
+  "batch_size": 8
+}

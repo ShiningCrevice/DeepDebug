@@ -1,0 +1,18 @@
+{
+  "case_id": "test_info_oom",
+  "family_id": "missing_oom_runtime",
+  "split": "test",
+  "category": "cuda_oom",
+  "group": "insufficient",
+  "materials": [
+    "materials/log.txt"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:29:15.353320+00:00",
+    "synthetic": true,
+    "paths_redacted": true,
+    "capture_method": "manual_scenario",
+    "exit_code": null,
+    "scope": "人工构造情境，非真实训练结果。"
+  }
+}

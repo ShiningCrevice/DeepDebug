@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "<string>", line 4, in <module>
+RuntimeError: shape '[3, 4]' is invalid for input of size 10
+numel= 10 requested=(3,4)

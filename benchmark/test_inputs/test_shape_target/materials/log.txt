@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+  File "/demo/benchmark/lib/python3.12/site-packages/torch/nn/functional.py", line 3458, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+IndexError: Target 4 is out of bounds.
+logits=(2,3), targets=[0,4]

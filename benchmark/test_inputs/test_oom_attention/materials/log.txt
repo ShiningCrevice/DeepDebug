@@ -1,0 +1,2 @@
+alloc_shape=(2,16,8192,8192) dtype=float32 free=6GiB
+RuntimeError: CUDA out of memory. Tried to allocate 8.00 GiB

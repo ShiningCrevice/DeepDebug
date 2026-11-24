@@ -1,0 +1,20 @@
+{
+  "case_id": "test_dep_optional",
+  "family_id": "optional_tensorboard_dependency",
+  "split": "test",
+  "category": "dependency",
+  "group": "common",
+  "materials": [
+    "materials/log.txt",
+    "materials/case.py",
+    "materials/target_snapshot.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:29:08.485611+00:00",
+    "synthetic": false,
+    "paths_redacted": true,
+    "capture_method": "scripts/build_benchmark.py",
+    "exit_code": 1,
+    "scope": "开发者固定最小程序的真实失败；快照为同解释器独立采集，修复未执行。"
+  }
+}

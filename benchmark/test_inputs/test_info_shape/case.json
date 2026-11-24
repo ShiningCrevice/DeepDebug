@@ -1,0 +1,18 @@
+{
+  "case_id": "test_info_shape",
+  "family_id": "missing_shape_context",
+  "split": "test",
+  "category": "configuration",
+  "group": "insufficient",
+  "materials": [
+    "materials/log.txt"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:29:15.350529+00:00",
+    "synthetic": true,
+    "paths_redacted": true,
+    "capture_method": "manual_scenario",
+    "exit_code": null,
+    "scope": "人工构造情境，非真实训练结果。"
+  }
+}

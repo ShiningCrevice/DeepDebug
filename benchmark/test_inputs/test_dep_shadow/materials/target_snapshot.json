@@ -1,0 +1,34 @@
+{
+  "schema_version": "1",
+  "environment": {
+    "mode": "snapshot",
+    "environment_id": "BENCH_CAPTURE",
+    "interpreter": "/demo/benchmark/python",
+    "collected_at": "2026-11-24T16:28:55.217440Z"
+  },
+  "python_version": "3.12.3",
+  "packages": [
+    {
+      "name": "torch",
+      "status": "installed",
+      "version": "2.9.1+cu128"
+    },
+    {
+      "name": "numpy",
+      "status": "installed",
+      "version": "2.5.4"
+    },
+    {
+      "name": "tensorboard",
+      "status": "not_found"
+    }
+  ],
+  "torch_cuda": {
+    "status": "ok",
+    "collected_at": "2026-11-24T16:28:55.237814Z",
+    "torch_version": "2.9.1+cu128",
+    "cuda_version": "12.8",
+    "cuda_available": true,
+    "device_count": 1
+  }
+}

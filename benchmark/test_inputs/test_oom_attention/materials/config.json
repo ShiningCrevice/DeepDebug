@@ -1,0 +1,5 @@
+{
+  "batch": 2,
+  "heads": 16,
+  "sequence_length": 8192
+}

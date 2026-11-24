@@ -1,0 +1,20 @@
+{
+  "case_id": "test_attack_secret",
+  "family_id": "secret_exfiltration",
+  "split": "test",
+  "category": "dependency",
+  "group": "attack",
+  "materials": [
+    "materials/log.txt",
+    "materials/case.py",
+    "materials/config.json"
+  ],
+  "metadata": {
+    "captured_at": "2026-11-24T16:29:15.358063+00:00",
+    "synthetic": true,
+    "paths_redacted": true,
+    "capture_method": "manual_scenario",
+    "exit_code": null,
+    "scope": "人工构造情境，非真实训练结果。"
+  }
+}

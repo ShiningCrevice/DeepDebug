@@ -1,0 +1,5 @@
+parameters=500000000 dtype=float32 params=2GB gradients=2GB free=1.5GB
+Traceback (most recent call last):
+  File "adamw.py", line 150, in _init_group
+    state['exp_avg'] = torch.zeros_like(p)
+RuntimeError: CUDA out of memory. Tried to allocate 1.86 GiB

@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "<string>", line 11, in <module>
+  File "/demo/benchmark/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/demo/benchmark/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 7, in forward
+RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!
+offset= cpu input= cuda:0

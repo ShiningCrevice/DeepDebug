@@ -25,7 +25,7 @@ def test_seed_categories_cover_mvp() -> None:
 
 
 @pytest.mark.parametrize(
-    "case_id", sorted(path.name for path in (ROOT / "dev").iterdir() if path.is_dir())
+    "case_id", sorted(path.stem for path in (ROOT / "gold/dev").glob("*.json"))
 )
 def test_captured_case_and_manual_reference_agree(case_id: str) -> None:
     case = ROOT / "dev" / case_id
@@ -86,7 +86,7 @@ def test_similar_logs_require_environment_context() -> None:
 
 @pytest.mark.parametrize(
     "case_id",
-    sorted(path.name for path in (ROOT / "dev").iterdir() if path.is_dir()),
+    sorted(path.stem for path in (ROOT / "gold/dev").glob("*.json")),
 )
 def test_captured_inputs_produce_traceable_collection(case_id: str) -> None:
     case = ROOT / "dev" / case_id

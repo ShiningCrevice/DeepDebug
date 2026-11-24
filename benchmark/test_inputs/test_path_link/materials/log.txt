@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "<string>", line 6, in <module>
+OSError: [Errno 40] Too many levels of symbolic links: 'weights.bin'
+weights.bin is_symlink=True; reader=O_NOFOLLOW
