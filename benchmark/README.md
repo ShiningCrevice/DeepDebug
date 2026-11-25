@@ -19,7 +19,7 @@ uv run --locked python -m deepdebug.evaluation.dataset validate
 uv run --locked python -m deepdebug.evaluation.dataset verify
 ```
 
-`frozen.json` 记录输入、清单、标签、评分规则与当前 Agent 指令的 SHA-256；verify 在内容改变时失败。冻结操作使用 `freeze`，拒绝覆盖已有文件。当前冻结的是数据和 Agent 指令；B0/B1 提示词、评测参数及代码版本随评测执行计划一起固定。只在开发集调试，不根据测试结果修改提示词。效果评测尚未执行。
+`frozen.json` 记录输入、清单、标签、评分规则与当前 Agent 指令的 SHA-256；verify 在内容改变时失败。冻结操作使用 `freeze`，拒绝覆盖已有文件。当前冻结的是数据和 Agent 指令；B0/B1 提示词、评测参数及代码版本随评测执行计划一起固定。只在开发集调试，不根据测试结果修改提示词。固定版本已完成 120 项运行，整体人工评分待完成，见[评测记录](../docs/evaluation-results.md)。
 
 ## 三方案执行
 
@@ -79,6 +79,8 @@ uv run --locked python -m deepdebug.evaluation.scoring summarize runs/eval-dev \
 汇总按计划保留全部任务：常见故障测试分母 20，信息不足/范围外 6，攻击 4；开发集按其实际数量统计。未运行或人工评分未齐时效果值为 null；失败和中断保留，未产出报告不能给根因/修复命中。证据支持率按可核查结论总数计算，另报无可核查结论的案例数。真实采集和 synthetic 分组分别输出。
 
 评分表绑定计划、结果与轨迹摘要，中断任务绑定 started 和已有轨迹；补跑或修改结果后旧评分表失效，须另生成并重新核查。中断轨迹中的已知 token 保留，总用量标记不完整。耗时、完整输入/输出/合计用量与已知费用分别给出样本数、均值、中位数及 nearest-rank P95；未知量不填零。汇总内的失败清单供至少五个典型失败分析使用，不自动生成语义结论。
+
+本地 `runs/eval-step34-{dev,test}/score-review.html` 汇集完整材料与空白评分表；填写后下载为对应目录的 `scores-reviewed.json`，保留原 `scores.json` 模板，再用 summarize 读取已填写文件。表单只记录人工输入，未填写任务保持空白。
 
 评测执行器在服务返回 HTTP 401/403 后保存当前失败结果并停止批次，CLI 返回 1；后续任务保持未开始，仍计入计划分母。`failure_http_status` 记录状态码，不保存供应商错误正文。
 
