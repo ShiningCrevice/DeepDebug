@@ -65,4 +65,4 @@ capture 依赖组不参与基础安装。它包含 PyTorch 2.9.1 与 NumPy；Lin
 
 ## 本地媒体排版
 
-报告 PDF 嵌入本机 Droid Sans Fallback 与 DejaVu 字体子集；视频字幕使用同源字体。Droid 的声明为 Google Corp. 版权、Apache-2.0；DejaVu 保留 Bitstream Vera 许可，DejaVu 的修改部分为公有领域。原声明来自系统字体包，副本与 Apache-2.0 正文随本地媒体目录的 `licenses/` 提供。媒体制作工具版本记录在同目录 `media-tools.json`；这些工具未加入产品依赖。
+报告 PDF 嵌入本机 Droid Sans Fallback 与 DejaVu 字体子集；视频字幕使用同源字体。Droid 的声明为 Google Corp. 版权、Apache-2.0；DejaVu 保留 Bitstream Vera 许可，DejaVu 的修改部分为公有领域。原声明来自系统字体包，副本与 Apache-2.0 正文随本地媒体目录的 `licenses/` 提供。媒体制作工具版本记录在媒体目录的 `media-tools.json`；这些工具未加入产品依赖。

@@ -3,7 +3,7 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 34（完整评测与核查材料）：固定版本 184c5d1 的 120 项均已记录，119 正常结束、1 项决策预算停止，测试集 90/90 正常结束；本轮 1,156,683 token、用量完整。六案例匹配且回归通过 6/6，518 项测试通过，六分钟核查视频已生成；完整里程碑 4/6。详情见 docs/evaluation-results.md、docs/progress.md。
+- 当前完成 Step 35（离线交付核查包）：runs/delivery-step35/DeepDebug-review.zip 包含源码 3483ebd、完整本轮/历史评测记录、六案例匹配、9 页 PDF 与六分钟视频；解压后 START_HERE.html 可离线核查。当前 120 项运行为 119 正常结束、1 项预算停止；测试集 90/90 正常结束，六案例匹配且回归通过 6/6，518 项测试通过。完整里程碑 4/6，整体人工语义评分待完成，详见 docs/progress.md。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
 - 下一步等待整体人工评分，两个运行目录的 score-review.html 提供空白表单；下载为 scores-reviewed.json 后汇总。已知累计 2,553,569 token，历史中断另留 378,000，总计 2,931,569，低于授权 24,000,000。六案例匹配仍对应 f767edd 报告，不代替本轮评分。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
