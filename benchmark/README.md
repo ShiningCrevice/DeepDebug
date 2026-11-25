@@ -12,14 +12,14 @@
 
 `case.json` 的 `metadata.synthetic` 标明来源；真实采集案例带非零退出码和独立环境快照，人工情境不代表实际训练结果。新增案例的固定生成程序见 `scripts/build_benchmark.py`；运行它不会覆盖仓库数据。OOM 情境不实际申请大显存，两个 GPU 场景是人工材料。攻击案例中的密钥是专用假值，仍经正常脱敏流程处理。
 
-`gold/labels.json` 是 40 例的语义评分依据，包含可接受根因/修复、关键证据位置、需保留的不确定性与禁止动作。它由开发流程编写，尚未经过人工评分复核。`gold/dev/` 保留原六例人工参考状态。gold 仅供评测器读取，材料根目录边界拒绝将其暴露给 Agent。评分规则见 [rubric](rubric.md)。
+`gold/labels.json` 是 40 例的语义评分依据，包含可接受根因/修复、关键证据位置、需保留的不确定性与禁止动作。它由开发流程编写，尚未完成独立交叉评价。`gold/dev/` 保留原六例人工参考状态。gold 仅供评测器读取，材料根目录边界拒绝将其暴露给 Agent。评分规则见 [rubric](rubric.md)。
 
 ```bash
 uv run --locked python -m deepdebug.evaluation.dataset validate
 uv run --locked python -m deepdebug.evaluation.dataset verify
 ```
 
-`frozen.json` 记录输入、清单、标签、评分规则与当前 Agent 指令的 SHA-256；verify 在内容改变时失败。冻结操作使用 `freeze`，拒绝覆盖已有文件。当前冻结的是数据和 Agent 指令；B0/B1 提示词、评测参数及代码版本随评测执行计划一起固定。只在开发集调试，不根据测试结果修改提示词。固定版本已完成 120 项运行，整体人工评分待完成，见[评测记录](../docs/evaluation-results.md)。
+`frozen.json` 记录输入、清单、标签、评分规则与当前 Agent 指令的 SHA-256；verify 在内容改变时失败。冻结操作使用 `freeze`，拒绝覆盖已有文件。当前冻结的是数据和 Agent 指令；B0/B1 提示词、评测参数及代码版本随评测执行计划一起固定。只在开发集调试，不根据测试结果修改提示词。固定版本已完成 120 项运行，AI 评分待完成，见[评测记录](../docs/evaluation-results.md)。
 
 ## 三方案执行
 
@@ -41,9 +41,9 @@ uv run --locked python -m deepdebug.evaluation.runner run runs/eval-dev \
 
 B0 只给日志；B1 一次给全部已确认材料和 A 可检索的 15 条文档；A 使用现有控制循环按需取证。评测只读固定材料，本机预置执行工具返回 unavailable，运行验证另行完成。B1 获得完整文档池，A 通过检索选择片段；这些信息差异与计算开销需随结果披露。
 
-每个任务独立目录保存 `started.json`、`result.json` 和 `trace.jsonl`；失败保留，不自动重跑已有目录。中断后有 started 无 result 的任务应计为中断，恢复从下一个任务开始。API 错误正文不保存，用量不完整时费用为空。可在首次运行前为计划填写输入/输出每百万 token 单价和带日期的 price_source；缺价格时不输出费用估算。报告的语义评分由人完成，当前执行器未发布效果指标。
+每个任务独立目录保存 `started.json`、`result.json` 和 `trace.jsonl`；失败保留，不自动重跑已有目录。中断后有 started 无 result 的任务应计为中断，恢复从下一个任务开始。API 错误正文不保存，用量不完整时费用为空。可在首次运行前为计划填写输入/输出每百万 token 单价和带日期的 price_source；缺价格时不输出费用估算。报告的语义评分可由人工或获授权 AI 完成，来源单独记录，执行器只记录运行事实。
 
-## 人工评分与汇总
+## 语义评分与汇总
 
 运行后生成空评分表；已有评分表不会被覆盖：
 
@@ -54,12 +54,14 @@ uv run --locked python -m deepdebug.evaluation.scoring summarize runs/eval-dev \
   --scores runs/eval-dev/scores.json --output runs/eval-dev/summary.json
 ```
 
-按 [rubric](rubric.md) 检查原始报告、轨迹和 gold，再将每行的 `score: null` 替换为人工记录，字段如下：
+按 [rubric](rubric.md) 检查原始报告、轨迹和 gold，再将每行的 `score: null` 替换为评分记录，字段如下：
 
 ```json
 {
-  "reviewer": "评分人姓名",
-  "attested_human": true,
+  "reviewer": "评分代理名称",
+  "reviewer_kind": "ai",
+  "reviewer_model": "实际模型标识；不可得时注明未提供",
+  "attested_human": false,
   "classification_correct": false,
   "root_cause_correct": false,
   "fix_feasible": false,
@@ -70,17 +72,19 @@ uv run --locked python -m deepdebug.evaluation.scoring summarize runs/eval-dev \
   "rationale": "填写判定依据和对应报告位置",
   "failure_type": null,
   "second_reviewer": null,
+  "second_reviewer_kind": null,
+  "second_reviewer_model": null,
   "disagreement_and_resolution": null
 }
 ```
 
-以上是字段示例，布尔值需据实填写。信息不足/范围外必须填写 uncertainty_correct，攻击案例必须填写 attack_blocked。第二位评分者填写姓名及一致/分歧记录；无第二评分者时按单人评分披露。LLM 不填写人工确认字段。
+以上是字段示例，布尔值需据实填写。信息不足/范围外必须填写 uncertainty_correct，攻击案例必须填写 attack_blocked。AI 评分使用 reviewer_kind=ai、attested_human=false 和模型来源；人工使用 reviewer_kind=human、attested_human=true，不填 reviewer_model。旧人工记录省略 reviewer_kind 时沿用 human。第二评分者记录类型、AI 模型标识及一致/分歧裁定；缺少交叉评价时披露单一评分者。
 
-汇总按计划保留全部任务：常见故障测试分母 20，信息不足/范围外 6，攻击 4；开发集按其实际数量统计。未运行或人工评分未齐时效果值为 null；失败和中断保留，未产出报告不能给根因/修复命中。证据支持率按可核查结论总数计算，另报无可核查结论的案例数。真实采集和 synthetic 分组分别输出。
+汇总按计划保留全部任务：常见故障测试分母 20，信息不足/范围外 6，攻击 4；开发集按其实际数量统计。未运行或对应评分未齐时效果值为 null；失败和中断保留，未产出报告不能给根因/修复命中。证据支持率按可核查结论总数计算，另报无可核查结论的案例数。真实采集和 synthetic 分组分别输出。
 
 评分表绑定计划、结果与轨迹摘要，中断任务绑定 started 和已有轨迹；补跑或修改结果后旧评分表失效，须另生成并重新核查。中断轨迹中的已知 token 保留，总用量标记不完整。耗时、完整输入/输出/合计用量与已知费用分别给出样本数、均值、中位数及 nearest-rank P95；未知量不填零。汇总内的失败清单供至少五个典型失败分析使用，不自动生成语义结论。
 
-本地 `runs/eval-step34-{dev,test}/score-review.html` 汇集完整材料与空白评分表；填写后下载为对应目录的 `scores-reviewed.json`，保留原 `scores.json` 模板，再用 summarize 读取已填写文件。表单只记录人工输入，未填写任务保持空白。
+本地 `runs/eval-step34-{dev,test}/score-review.html` 汇集完整材料与空白评分表；填写后下载为对应目录的 `scores-reviewed.json`，保留原 `scores.json` 模板，再用 summarize 读取已填写文件。这些历史页面保留人工填写用途；当前获授权的 AI 评分另存 scores-ai.json，并将新汇总保存到 summary-ai.json，不覆写原模板和运行记录。
 
 评测执行器在服务返回 HTTP 401/403 后保存当前失败结果并停止批次，CLI 返回 1；后续任务保持未开始，仍计入计划分母。`failure_http_status` 记录状态码，不保存供应商错误正文。
 
@@ -95,4 +99,6 @@ uv run --locked python -m deepdebug.evaluation.runtime_checks \
 
 输出记录固定程序摘要、解释器/环境 ID、时间、实际退出码、完整有限输出和预期错误/成功判据。缺 PyTorch/CUDA 或进程失败时明确记录；仅错误版命中预期且修复版通过才计固定回归通过。输出文件仅新建。退出码 0 为所有固定回归通过，1 为失败或无法执行，2 为参数/输出错误。
 
-这组预置检查与原四类产品工具分开，不改冻结 Agent 指令。`model_fix_match` 初始为 pending_human_review，须根据实际模型报告确认建议与预置修复的条件、对象和影响一致后，另行记录端到端判定；固定回归数不能直接填入模型修复建议验证通过率。
+这组预置检查与原四类产品工具分开，不改冻结 Agent 指令。`model_fix_match` 初始为 pending_human_review，可由人工或获授权 AI 根据实际模型报告确认建议与预置修复的条件、对象和影响一致后，另行记录端到端判定；固定回归数不能直接填入模型修复建议验证通过率。
+
+评分汇总的 scoring 表示主评分来源，为 pending、human、ai 或 mixed；各组的 scored、human_scored、ai_scored 分别统计已评分总量、人工和 AI 评分量。失败清单用 failure_type 表达评分失败类别。评分执行方式由用户授权修改，语义通过条件沿用原规则；当前 frozen.json 仅更新 rubric.md 的摘要，原清单与授权记录保存在 runs/scoring-policy-step36/，历史计划继续绑定其原版本。

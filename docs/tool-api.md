@@ -205,3 +205,11 @@ Streamlit 页面使用同一 `diagnose` 和 `replay_reviewed`；外发动作由�
 `continue_session(saved, review, history_reviewed, allowance, consent|replay_model)` 要求旧会话有确认副本并已停止，历史已核查，新 review confirmed 且保留旧前缀；云端与回放模型二选一。新增 Budget 不得有已消费计数。状态继续使用相同 session_id，累计已用计数保持，新上限为已用量加本次额度；continued_from_sha256 记录续跑前完整状态摘要，previous_conclusion 保存上一轮摘要/分类/修复/未决问题。
 
 恢复时重新校验登记材料与状态、证据 ID、工具缓存参数、外发授权和最终报告。环境绑定未变时旧工具失败也作为历史缓存保留；新增快照改变绑定或使 ID 歧义时，环境/GPU 调用重新调度。旧报告保留在轨迹，当前报告重新生成；轨迹序号连续，末状态等于保存状态。CLI continue 成功/缺信息/无进展返回 0，运行异常停止返回 1，准备或保存错误返回 2。准备失败不覆盖保存记录。
+
+## 评测评分来源
+
+`evaluation.scoring.SemanticScore` 的 reviewer 标识实际评分者，reviewer_kind 为 human（缺省，兼容旧记录）或 ai。人工的 attested_human=true 且 reviewer_model 为空；AI 的 attested_human=false 且 reviewer_model 必填，未知精确标识须注明未提供。来源与声明冲突会被拒绝。
+
+second_reviewer、second_reviewer_kind、second_reviewer_model 记录复评者；旧记录未填复评类型时按 human 解释。AI 复评必须有模型来源，所有复评均需 disagreement_and_resolution；无复评者不能只填来源。primary/secondary 身份不能相同。评分字段及证据计数见 benchmark/README.md。
+
+汇总的 scoring 表示主评分来源，为 pending/human/ai/mixed；每组 scored 是总评分量，human_scored 与 ai_scored 分别统计来源。failure_type 为评分失败类别。记录持续绑定原计划和结果/轨迹摘要，AI 评分不改运行状态、分母或已保存的诊断结论。

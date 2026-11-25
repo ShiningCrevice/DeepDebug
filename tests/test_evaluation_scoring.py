@@ -1,4 +1,4 @@
-"""Human-score denominators, result binding and incomplete-run accounting."""
+"""Score provenance, denominators, result binding and incomplete-run accounting."""
 
 import json
 
@@ -17,7 +17,7 @@ from test_evaluation_runner import (
 )
 
 from deepdebug.evaluation.runner import execute
-from deepdebug.evaluation.scoring import HumanScore, distribution, prepare_scores, summarize
+from deepdebug.evaluation.scoring import SemanticScore, distribution, prepare_scores, summarize
 
 
 def fill_score(**changes):
@@ -103,6 +103,78 @@ def test_partial_scoring_does_not_publish_accuracy(completed):
     assert b0["root_cause_correct"]["denominator"] == 10
 
 
+@pytest.mark.parametrize("mixed", [False, True])
+def test_ai_scores_keep_source_and_denominators(completed, mixed):
+    folder, scores = completed
+    data = json.loads(scores.read_text())
+    for row in data["rows"]:
+        row["score"] = fill_score(
+            reviewer="test-ai-fixture",
+            reviewer_kind="ai",
+            reviewer_model="test-model-v1",
+            attested_human=False,
+        )
+    if mixed:
+        data["rows"][0]["score"] = fill_score()
+    scores.write_text(json.dumps(data))
+    summary = summarize(folder, scores)
+    assert summary["scoring"] == ("mixed" if mixed else "ai")
+    b0 = summary["approaches"]["B0"]
+    assert b0["scored"] == 10
+    assert b0["human_scored"] == int(mixed)
+    assert b0["ai_scored"] == 10 - int(mixed)
+    assert b0["root_cause_correct"]["value"] == 1
+    assert b0["root_cause_correct"]["denominator"] == 10
+
+
+def test_partial_ai_scores_do_not_publish_accuracy(completed):
+    folder, scores = completed
+    data = json.loads(scores.read_text())
+    data["rows"][0]["score"] = fill_score(
+        reviewer="test-ai-fixture",
+        reviewer_kind="ai",
+        reviewer_model="test-model-v1",
+        attested_human=False,
+    )
+    scores.write_text(json.dumps(data))
+    summary = summarize(folder, scores)
+    assert summary["scoring"] == "pending"
+    b0 = summary["approaches"]["B0"]
+    assert b0["ai_scored"] == 1
+    assert b0["human_scored"] == 0
+    assert b0["root_cause_correct"]["value"] is None
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"reviewer_kind": "ai", "reviewer_model": "model"},
+        {"reviewer_kind": "ai", "attested_human": False},
+        {"reviewer_model": "model"},
+        {"second_reviewer_kind": "ai", "second_reviewer_model": "model"},
+        {"second_reviewer": "peer", "second_reviewer_kind": "ai"},
+        {"second_reviewer": "peer", "second_reviewer_model": "model"},
+    ],
+)
+def test_inconsistent_reviewer_provenance_rejected(changes):
+    with pytest.raises(ValueError):
+        SemanticScore.model_validate(fill_score(disagreement_and_resolution="fixture", **changes))
+
+
+@pytest.mark.parametrize("kind", ["human", "ai"])
+def test_secondary_review_kind_is_preserved(kind):
+    score = SemanticScore.model_validate(
+        fill_score(
+            second_reviewer="peer-fixture",
+            second_reviewer_kind=kind,
+            second_reviewer_model="peer-model" if kind == "ai" else None,
+            disagreement_and_resolution="Independent fixture review agrees.",
+        )
+    )
+    assert score.second_reviewer_kind == kind
+    assert score.second_reviewer_model == ("peer-model" if kind == "ai" else None)
+
+
 def test_changed_results_invalidate_existing_scores(completed):
     folder, scores = completed
     path = folder / "dep_001.B0/result.json"
@@ -118,7 +190,7 @@ def test_changed_results_invalidate_existing_scores(completed):
 )
 def test_invalid_human_scores_rejected(changes):
     with pytest.raises(ValueError):
-        HumanScore.model_validate(fill_score(**changes))
+        SemanticScore.model_validate(fill_score(**changes))
 
 
 def test_duplicate_rows_cannot_reduce_denominator(completed):

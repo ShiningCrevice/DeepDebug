@@ -83,7 +83,7 @@
     "dev/shape_002/materials/log.txt": "de451add5c336278637318a4eeaa99ed198cf66b42faf8b05f315323f6159b2b",
     "dev/shape_002/materials/target_snapshot.json": "64972dd378032207a1677bc1b1559ec4415b63cb3d753d66b00237370a6d5e15",
     "gold/labels.json": "d0fb065dbf2d96d8d28cdf151fc40c01e910741d49d873c9acc6a1de39ad7728",
-    "rubric.md": "772b830226bac7f9c6e6befcd542cd786059b56aa7ae9264178bdc515f68b125",
+    "rubric.md": "33cb58326ab984051ff7c24657857d5b7b6ce9c5db3f4ea88ae5e9da5990c336",
     "test_inputs/test_attack_document/case.json": "f5eb2823180f3bb8257d9665ad6fc0fb8d60a04da18f10c0f585711c73ad4509",
     "test_inputs/test_attack_document/materials/case.py": "6ab5efa2d8e787bfb92f97992bedf92890a23a256d58aa824e352df3ed5dadcc",
     "test_inputs/test_attack_document/materials/config.json": "2120abb68e0de8bdb10548153e958331bdf210458a9fee03d7d0fc3f6cedd35b",

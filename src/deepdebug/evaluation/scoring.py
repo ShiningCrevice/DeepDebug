@@ -1,10 +1,11 @@
-"""Create human score sheets and summarize planned tasks with explicit denominators."""
+"""Create score sheets and summarize tasks with explicit reviewer provenance."""
 
 import argparse
 import json
 import math
 from pathlib import Path
 from statistics import median
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -15,9 +16,11 @@ from deepdebug.evaluation.baselines import BaselineAnswer
 from deepdebug.evaluation.runner import EvaluationPlan, digest, write_json
 
 
-class HumanScore(Contract):
+class SemanticScore(Contract):
     reviewer: Text
-    attested_human: bool
+    reviewer_kind: Literal["human", "ai"] = "human"
+    reviewer_model: Text | None = None
+    attested_human: bool = Field(strict=True)
     classification_correct: bool
     root_cause_correct: bool
     fix_feasible: bool
@@ -28,18 +31,30 @@ class HumanScore(Contract):
     rationale: Text
     failure_type: str | None = None
     second_reviewer: str | None = None
+    second_reviewer_kind: Literal["human", "ai"] | None = None
+    second_reviewer_model: Text | None = None
     disagreement_and_resolution: str | None = None
 
     @model_validator(mode="after")
-    def human_and_counts(self):
-        if not self.attested_human:
-            raise ValueError("semantic scores require a human reviewer")
+    def provenance_and_counts(self):
+        if self.attested_human != (self.reviewer_kind == "human"):
+            raise ValueError("human attestation must match reviewer kind")
+        if (self.reviewer_model is not None) != (self.reviewer_kind == "ai"):
+            raise ValueError("AI scores require model provenance; human scores do not")
         if self.evidence_supported > self.evidence_total:
             raise ValueError("supported evidence cannot exceed total claims")
         if self.second_reviewer and not self.disagreement_and_resolution:
             raise ValueError("secondary review needs agreement or disagreement record")
         if self.second_reviewer == self.reviewer:
-            raise ValueError("secondary reviewer must be a different person")
+            raise ValueError("secondary reviewer must have a different identity")
+        if not self.second_reviewer and (
+            self.second_reviewer_kind is not None or self.second_reviewer_model is not None
+        ):
+            raise ValueError("secondary provenance needs a reviewer")
+        if self.second_reviewer and (self.second_reviewer_model is not None) != (
+            self.second_reviewer_kind == "ai"
+        ):
+            raise ValueError("secondary AI scores require model provenance")
         return self
 
 
@@ -47,7 +62,7 @@ class ScoreRow(Contract):
     case_id: Text
     approach: Text
     result_sha256: str | None
-    score: HumanScore | None = None
+    score: SemanticScore | None = None
 
 
 class ScoreSheet(Contract):
@@ -207,7 +222,13 @@ def metrics(tasks: list[dict]) -> dict:
         "failed": sum(t["status"] == "failed" for t in tasks),
         "interrupted": sum(t["status"] == "interrupted" for t in tasks),
         "not_started": sum(t["status"] == "not_started" for t in tasks),
-        "human_scored": sum(t["score"] is not None for t in tasks),
+        "scored": sum(t["score"] is not None for t in tasks),
+        "human_scored": sum(
+            t["score"] is not None and t["score"].reviewer_kind == "human" for t in tasks
+        ),
+        "ai_scored": sum(
+            t["score"] is not None and t["score"].reviewer_kind == "ai" for t in tasks
+        ),
         "common_scored": len(scored_common),
     }
     for field in ("classification_correct", "root_cause_correct", "fix_feasible"):
@@ -295,13 +316,15 @@ def summarize(folder: Path, scores_path: Path) -> dict:
         ):
             raise ValueError("missing reports cannot receive successful semantic scores")
         task["score"] = row.score
+    reviewer_kinds = {t["score"].reviewer_kind for t in tasks if t["score"] is not None}
+    scoring = next(iter(reviewer_kinds)) if len(reviewer_kinds) == 1 else "mixed"
     return {
         "plan_sha256": sheet.plan_sha256,
         "split": plan.split,
         "model": plan.model,
         "code_version": plan.code_version,
         "price_source": plan.price_source,
-        "scoring": "human" if all(t["score"] is not None for t in tasks) else "pending",
+        "scoring": scoring if all(t["score"] is not None for t in tasks) else "pending",
         "second_review_cases": len(
             {t["case_id"] for t in tasks if t["score"] and t["score"].second_reviewer}
         ),
@@ -321,7 +344,7 @@ def summarize(folder: Path, scores_path: Path) -> dict:
                 "approach": t["approach"],
                 "status": t["status"],
                 "failure": t["result"]["failure"] if t["result"] else t["status"],
-                "human_failure_type": t["score"].failure_type if t["score"] else None,
+                "failure_type": t["score"].failure_type if t["score"] else None,
                 "rationale": t["score"].rationale if t["score"] else None,
             }
             for t in tasks
@@ -346,7 +369,7 @@ def main() -> int:
                 write_json(args.output, result)
             print(json.dumps(result, ensure_ascii=False, indent=2))
     except (OSError, ValueError, KeyError, TypeError):
-        print("评分汇总失败：检查计划、任务记录、结果摘要和人工评分字段。")
+        print("评分汇总失败：检查计划、任务记录、结果摘要和评分来源字段。")
         return 1
     return 0
 
