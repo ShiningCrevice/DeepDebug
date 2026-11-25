@@ -188,7 +188,7 @@ Streamlit 页面使用同一 `diagnose` 和 `replay_reviewed`；外发动作由�
 
 工具 data 保留案例、阶段、预置修复、成功判据、检查状态、解释器、环境标识、时间及 execution；执行成功取得检查结果时工具 status=ok，data.status 区分失败与预置复现通过。工具失败时 data 为空、error 说明原因；缺环境为 unavailable，超时为 timeout，无法保留完整输出为 error。固定普通/设备检查超时为 10/15 秒，输出最多 64 KiB。
 
-`Verification.fix_index` 为可选的从 1 开始修复建议序号，须在 report.fixes 范围内。`verify-report` 读取完整状态，用户通过 matches-preset 确认匹配后执行前后对照，追加证据/工具记录/验证，并重新校验完整状态。未确认时仅记录未执行。CLI 新建验证后状态文件；UI 更新当前结果并追加完整状态轨迹事件。匹配确认是人工核查声明，不是自动语义判分。
+`Verification.fix_index` 为可选的从 1 开始修复建议序号，须在 report.fixes 范围内。`verify-report` 读取完整状态，用户通过 matches-preset 确认匹配后执行前后对照，追加证据/工具记录/验证，并重新校验完整状态。未确认时仅记录未执行。CLI 新建验证后状态文件；UI 更新当前结果并追加完整状态轨迹事件。匹配确认是调用方的核查声明，可由用户或获授权 AI 代理执行；实际核查者另附来源记录，不把 AI 声明标成人工评分。
 
 ## 本地会话存储
 

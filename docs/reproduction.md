@@ -1,13 +1,13 @@
 # 干净环境复现
 
-已从提交 `0de383e` 创建独立克隆和全新虚拟环境，按锁文件安装基础与 UI 依赖。Linux / Python 3.12.3 下，495 项测试、Ruff 检查和构建通过；未安装 PyTorch。其他操作系统和 Python 版本未验证。
+已从提交 `7aa498a` 创建独立克隆和全新虚拟环境，按锁文件安装基础与 UI 依赖。Linux / Python 3.12.3 下，529 项测试、Ruff 检查和构建通过；未安装 PyTorch。其他操作系统和 Python 版本未验证。
 
 ## 安装与检查
 
 ```bash
 git clone https://github.com/ShiningCrevice/DeepDebug.git
 cd DeepDebug
-git checkout 0de383e
+git checkout 7aa498a
 uv sync --locked --extra ui
 uv run --locked --extra ui ruff check .
 uv run --locked --extra ui ruff format --check .
@@ -15,7 +15,7 @@ uv run --locked --extra ui pytest -q
 uv build
 ```
 
-实际复现使用本机仓库的独立克隆 `/tmp/deepdebug-clean-step26`，使用系统 Python 和新建 `.venv`，没有复制原开发环境。安装了 47 个包；构建生成 sdist 和 wheel。首次依赖下载被网络沙箱阻止，允许锁定包下载后安装通过。离线复现需预先准备相同依赖缓存。
+实际复现使用本机仓库的独立克隆 `/tmp/deepdebug-clean-step38`，使用系统 Python 和新建 `.venv`，没有复制原开发环境。安装了 47 个包；构建生成 sdist 和 wheel。本次使用预备的锁定依赖缓存离线安装；没有复制开发环境的 .venv。首次安装仍需可用包源，离线复现须先准备相同缓存。
 
 ## 无模型服务的完整报告流程
 
@@ -42,7 +42,7 @@ uv run --locked deepdebug check-report \
 
 实跑结论为 completed，产生 9 条证据和 4 次真实只读工具调用；JSON 与 Markdown 检查返回“报告内容一致”。所有材料标为 reviewed，修复验证为“未执行”。模型响应来自明确标注的 synthetic 示例，仅验证控制流程和导出，不代表模型诊断效果。
 
-CLI 输出仅新建文件，示例用 noclobber 阻止 shell 重定向覆盖已有 state.json；重复复现需另选空输出目录。原始运行产物保留在本地 runs，不纳入 Git。
+CLI 输出仅新建文件，示例用 noclobber 阻止 shell 重定向覆盖已有 state.json；重复复现需另选空输出目录。原始运行产物保留在独立克隆的 runs/clean-smoke/，最终交付副本位于 runs/delivery-step38/clean-smoke/，不纳入 Git。preview 核查由获授权的 Codex 执行，verification.json 记录来源与检查结果。
 
 ## 页面启动
 
@@ -50,7 +50,7 @@ CLI 输出仅新建文件，示例用 noclobber 阻止 shell 重定向覆盖已�
 uv run --locked --extra ui streamlit run app.py
 ```
 
-默认打开 `http://127.0.0.1:8501`。实际检查使用临时端口 8526，健康接口返回 `ok`，主页 HTTP 200；检查后服务已停止。页面交互由同次 AppTest 测试覆盖，包括上传确认、离线演示、报告下载、会话恢复和继续诊断。HTTP 主页检查本身不等于完成了浏览器人工操作。
+默认打开 `http://127.0.0.1:8501`。实际检查使用临时端口 8538，健康接口返回 `ok`，主页 HTTP 200；检查后服务已停止。首次服务启动被执行沙箱禁止创建套接字；放行本机监听后健康检查通过。页面交互由同次 AppTest 测试覆盖，包括上传确认、离线演示、报告下载、会话恢复和继续诊断。HTTP 主页检查本身不等于完成了浏览器人工操作。
 
 ## 无 PyTorch / GPU 的行为
 
