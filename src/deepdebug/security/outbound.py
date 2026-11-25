@@ -64,6 +64,7 @@ class OutboundBoundary:
             raise ValueError("云端请求必须来自当前宿主会话。")
         # Full source files are not attached. Tools select evidence excerpts as needed.
         data = {
+            "output_format": "JSON",
             "state": request.state.model_dump(
                 mode="json", exclude={"budget", "cloud_consent", "report", "next_action"}
             ),

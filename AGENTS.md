@@ -3,7 +3,7 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 30（基线接口修复与 MIT 许可）：505 项测试通过，B0/B1 正文显式声明 JSON；MIT 署名 2026 ShiningCrevice。完整里程碑 4/6，首轮试跑 A 成功、B0/B1 HTTP 400；修复后重新试跑 3 项，通过后执行全部 120 项，累计额度不超过 24,000,000 token。详情见 `docs/progress.md`。
+- 当前完成 Step 31（纯文本诊断接口修复）：506 项测试通过；A 正文固定声明 JSON，消除对材料文件名的依赖。原版开发集 30/30 完成，测试集 47 正常结束、3 接口失败、1 中断，均保留原记录。待新版本以每任务 180,000 token 重跑 120 项，总额度仍为 24,000,000 token。完整里程碑 4/6，详情见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
 - 下一步执行开发集预检和 B0/B1/A 真实评测，人工评分后完成课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。

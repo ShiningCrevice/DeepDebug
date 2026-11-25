@@ -10,7 +10,7 @@
 | 技术报告 | [technical-report](technical-report.md) | 实现章节完成；实测结果待补；Markdown 约 6,900 字符，排版页数未验证 |
 | 数据集与 rubric | [benchmark](../benchmark/README.md) | 10 开发、30 测试，已冻结；标签待人工评分复核 |
 | 检索语料来源 | [knowledge](../knowledge/README.md) | 15 条摘要，来源与版本完整 |
-| 对照评测结果 | 运行目录中的 plan/result/trace/summary | 已授权先试跑 3 项，通过后执行全部 120 项 |
+| 对照评测结果 | 运行目录中的 plan/result/trace/summary | 首次三项通过；纯文本接口缺陷已修复，保留原批次并准备同版重跑 120 项 |
 | 代表性报告 | 本地 runs/clean-smoke/report.md 与 report.json | 独立克隆已导出 synthetic 演示，双格式一致 |
 | 运行验证 | builtin-check 与 verify-report | 六个选定案例固定回归 6/6；与实际模型建议的端到端匹配待补 |
 | 复现记录 | [reproduction](reproduction.md) | 独立环境 495 项测试、构建、报告和 UI 启动通过 |

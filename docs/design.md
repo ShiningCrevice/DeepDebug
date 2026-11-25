@@ -109,7 +109,7 @@ GPU 查询保留快照采样时间；路径检查标记为运行命令主机的 
 
 CLI 使用 python-dotenv 加载当前工作目录的 `.env`，保留已有环境变量；不向父目录搜索配置。CLI 按 `--base-url`、`OPENAI_BASE_URL`、`https://api.openai.com/v1` 的优先级选择基础地址，保留版本/网关前缀，去掉尾斜杠后追加 `/responses`。`security/destination.py` 统一规范化 URL，支持 HTTP/HTTPS，拒绝内嵌凭据、查询参数、片段和空白；CloudConsent 在状态边界复用同一校验。启动前将最终地址与显式 `--send-to` 比较，匹配后才建立会话。客户端只使用确认记录中的地址，后续环境变量变化不改变目的地。
 
-`OpenAIResponsesClient` 只从 `OPENAI_API_KEY` 读取凭据，关闭代理环境变量、重定向和隐式重试。HTTP 用于显式选择的服务，会明文传输凭据与材料。自定义地址复用 Responses 协议，服务须支持现有请求字段和返回结构；Chat Completions 适配尚未实现。采用 Responses JSON mode，将现有完整决策 Schema 放入用户数据，并由 Pydantic 验证结果；避免把包含判别联合的本地协议改成供应商的 Schema 子集。`store=false` 控制响应存储选项，不代表供应商零保留。接口依据见 [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create) 与 [JSON mode 说明](https://developers.openai.com/api/docs/guides/structured-outputs)。
+`OpenAIResponsesClient` 只从 `OPENAI_API_KEY` 读取凭据，关闭代理环境变量、重定向和隐式重试。HTTP 用于显式选择的服务，会明文传输凭据与材料。自定义地址复用 Responses 协议，服务须支持现有请求字段和返回结构；Chat Completions 适配尚未实现。采用 Responses JSON mode，在用户正文固定加入 `output_format: JSON`，并将现有完整决策 Schema 放入用户数据，并由 Pydantic 验证结果；避免把包含判别联合的本地协议改成供应商的 Schema 子集。`store=false` 控制响应存储选项，不代表供应商零保留。接口依据见 [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create) 与 [JSON mode 说明](https://developers.openai.com/api/docs/guides/structured-outputs)。
 
 HTTPX 异步流逐块读取，响应解码后最多 1 MiB；`asyncio.wait_for` 覆盖连接、读取与关闭，以控制器剩余时间减去请求准备时间为限。当前同步客户端入口使用 `asyncio.run`，供 CLI 调用。输入以 UTF-8 字节数加固定余量保守预留，输出上限最多 4,096 token；额度不足直接停止。API 用量字段必须有效，拒答、截断和非决策输出仍保留已返回用量。缺失用量或网络异常记录 `usage_complete=false`，已知总量不能充当完整账单。取消本机等待无法证明服务端停止生成或计费；这些传输分支已用 HTTP 模拟验证，实际供应商行为待实跑。
 

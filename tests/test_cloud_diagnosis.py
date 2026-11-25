@@ -107,6 +107,19 @@ def client_request(review):
     return client, request
 
 
+def test_json_mode_supports_materials_without_json_filenames(reviewed, http):
+    def handler(request):
+        payload = json.loads(request.content)
+        if "json" not in payload["input"][0]["content"].lower():
+            return httpx.Response(400, json={"error": {"type": "invalid_request_error"}})
+        return httpx.Response(200, json=response())
+
+    http(handler)
+    state = diagnose(reviewed, consent(reviewed))
+    assert state.stop_reason == "need_info"
+    assert state.report.unresolved_questions == ["请补充环境快照。"]
+
+
 @pytest.fixture
 def http(monkeypatch):
     original = httpx.AsyncClient
