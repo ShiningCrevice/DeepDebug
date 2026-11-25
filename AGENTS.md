@@ -3,9 +3,9 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 36（AI 评分规则与来源记录）：规划允许 AI 独立评分及后续核查代理执行，SemanticScore 区分 human/ai 并记录模型与复评分歧；529 项测试通过。Claude Code 的 claude-opus-5-5 探测通过，正式评分尚未执行。120 项诊断记录及离线核查包保留，完整里程碑 4/6。
+- 当前完成 Step 37（完整 AI 评分与语义复盘）：120 份报告均有 Codex 主评分、claude-opus-5-5 独立复评及裁定；A 测试分类/根因/修复/证据为 90%/95%/90%/91.3%，不足/范围外 6/6、攻击 4/4，达到规划目标。A 根因低于 B1 五个百分点，不宣称循环优于完整材料问答。529 项测试通过，完整里程碑 5/6。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
-- 下一步由执行 AI 对全部报告评分，并用 Claude Code Opus 5.5 交叉评价；无需等待人工评分或核查。评分和后续匹配/验收须记录实际执行者，不把 AI 结果标为人工。既有材料范围、目的地、工具权限和预算仍按用户授权及协议执行。benchmark 运行已知 2,553,569 token；Claude 探测另 10,453 token，历史中断预留 378,000，合计 2,942,022，低于原授权总额 24,000,000。
+- 下一步更新最终 PDF、视频、离线交付包并核对完整验收；无需等待人工评分或核查。原评分位于 runs/ai-scoring-step37/，两个正式运行目录另存 scores-ai.json/summary-ai.json；不覆盖原报告、空表或历史包，不把 AI 结果标为人工。六案例匹配仍对应 f767edd 报告。既有材料范围、目的地、权限和预算按用户授权执行。benchmark 历史已知 2,553,569 token；Claude 评分及探测 904,302，历史中断预留 378,000，合计 3,835,871，低于原授权总额 24,000,000。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
 
 ## 每步交付
@@ -30,7 +30,7 @@
 - `scripts/capture_dependency_cases.py` 和 `scripts/capture_failure_cases.py` 是开发用固定采集脚本，不是 Agent 工具。后者显式选择解释器和案例，配额 OOM 固定申请 64 MiB，不等同于整卡显存耗尽；缺少环境不生成案例。参考状态/报告位于 `benchmark/gold/dev/`，均为人工编写，修复未执行。
 - `snapshot` / `scripts/collect_environment.py` 由用户显式选择解释器采集；`--torch-cuda`、`--gpu` 可选。`collect` 只读取环境快照；路径检查来自本机 `collector`，不能当成目标快照环境的文件状态。真实 PyTorch/CUDA 可用性已采集；当前 WSL 的 nvidia-smi 不在系统默认搜索路径，自动 GPU 显存摘要仍不可用。
 
-- `collect` 是宿主驱动的只读取证；`replay` 执行离线控制循环。工具成功不能当成诊断或修复成功。`collect` 与 `replay --root` 保持未脱敏的 `pending` 材料；`replay --reviewed` 与 `diagnose` 只读取确认副本，材料为 `reviewed`，状态和轨迹记录确认摘要。自动规则须人工核查；单次已确认运行不接受原始材料或本机路径；续跑须先通过 extend-preview 追加，再核查、confirm 和授权。
+- `collect` 是宿主驱动的只读取证；`replay` 执行离线控制循环。工具成功不能当成诊断或修复成功。`collect` 与 `replay --root` 保持未脱敏的 `pending` 材料；`replay --reviewed` 与 `diagnose` 只读取确认副本，材料为 `reviewed`，状态和轨迹记录确认摘要。自动脱敏结果须由用户或获授权 AI 核查；单次已确认运行不接受原始材料或本机路径；续跑须先通过 extend-preview 追加，再核查、confirm 和授权。
 - 模型访问使用绑定当前 dispatcher 的 Responses 适配器。地址优先级为 `--base-url`、`OPENAI_BASE_URL`、OpenAI 默认地址；最终地址须与 `--send-to` 一致，运行中不改目的地、不跟随重定向。密钥仅从 `OPENAI_API_KEY` 读取；地址接受 HTTP/HTTPS，不含凭据、查询参数或片段。请求与响应在边界脱敏，供应商错误正文不落盘；用量缺失或网络异常时 `budget.usage_complete=false`，已知 token 合计不能冒充完整费用统计。HTTP 固定响应测试不计为真实模型诊断。
 - 安全材料读取需要 POSIX `dir_fd/O_NOFOLLOW`；所有链接均拒绝。工具读取登记时固定的内容，保证行号和证据一致。
 - 文档检索只读取 `src/deepdebug/knowledge/documents.json` 的随包副本，来源清单见 `knowledge/README.md`；不得索引仓库或 gold。固定包目录可位于隐藏的虚拟环境目录，用户材料仍拒绝隐藏路径。文档是带版本与整理时间的人工摘要，只能提供一般规则。

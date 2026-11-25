@@ -2,7 +2,7 @@
 
 面向 PyTorch 训练与推理故障的诊断助手。目标是根据日志、代码、配置和环境快照，按需补充证据，输出可追溯的候选根因、修复建议和验证方法。
 
-**当前状态：已完成 Step 36（AI 评分规则与来源记录）。** 规划允许获授权 AI 独立评分、交叉评价及后续核查；评分器区分人工/AI 来源并保留模型、依据和复评分歧。Claude Code 已验证可调用 claude-opus-5-5，529 项测试通过。完整 120 项诊断记录及离线核查包已保留，下一步执行 AI 评分并更新最终报告、视频和交付包；完整里程碑仍 4/6。详见 [交付索引](docs/delivery.md)、[评测记录](docs/evaluation-results.md) 与 [进度记录](docs/progress.md)。项目采用 [MIT License](LICENSE)。
+**当前状态：Step 37 完成全部 120 份报告的 AI 评分与 Opus 5.5 独立交叉评价。** A 在 20 个常见故障测试案例中的分类、根因、修复、证据支持率为 90%、95%、90%、91.3%，不足/范围外处理 6/6、攻击阻断 4/4。根因比 B0 高 10 个百分点、比 B1 低 5 个百分点，未证明循环优于完整材料单次问答。529 项测试通过，完整里程碑 5/6；下一步更新最终 PDF、视频和离线交付包。评分原件及裁定位于 runs/ai-scoring-step37/，汇总为 runs/eval-step34-{dev,test}/summary-ai.json。详见 [评测记录](docs/evaluation-results.md)、[交付索引](docs/delivery.md) 与 [进度记录](docs/progress.md)。项目采用 [MIT License](LICENSE)。
 
 ## 文档导航
 
@@ -40,7 +40,7 @@ uv run --locked pytest
 uv build
 ```
 
-测试覆盖 CLI、协议与证据引用、路径边界、探针隔离与降级、文档检索、控制循环，以及 HTTP 模拟下的外发授权、凭据保护、用量和超时取消。测试不调用付费 API；真实模型诊断效果待评测。
+测试覆盖 CLI、协议与证据引用、路径边界、探针隔离与降级、文档检索、控制循环，以及 HTTP 模拟下的外发授权、凭据保护、用量和超时取消。测试不调用付费 API；真实模型效果另见[对照评测](docs/evaluation-results.md)。
 
 ## 本地界面
 
@@ -95,7 +95,7 @@ uv run --locked deepdebug replay \
 
 ## 云端诊断
 
-先完成 `preview → 人工核查 → confirm`，并配置 `OPENAI_API_KEY`。在项目根目录将 `.env.example` 复制为 `.env`，填写密钥与 `OPENAI_BASE_URL`；从该目录运行 `diagnose` 时自动加载。已有环境变量优先于文件，`.env` 已被 Git 忽略。以下命令明确授权：把已确认材料中按工具选取的片段、工具结果、文档摘要和模型判断发送至所选服务。默认服务为 OpenAI；替换模型占位符后运行，模型须支持 Responses API 的 JSON mode，账户须有访问权限。
+先完成 `preview → 核查 → confirm`（可由用户或获授权 AI 核查），并配置 `OPENAI_API_KEY`。在项目根目录将 `.env.example` 复制为 `.env`，填写密钥与 `OPENAI_BASE_URL`；从该目录运行 `diagnose` 时自动加载。已有环境变量优先于文件，`.env` 已被 Git 忽略。以下命令明确授权：把已确认材料中按工具选取的片段、工具结果、文档摘要和模型判断发送至所选服务。默认服务为 OpenAI；替换模型占位符后运行，模型须支持 Responses API 的 JSON mode，账户须有访问权限。
 
 ```bash
 uv run --locked deepdebug diagnose \
@@ -326,7 +326,7 @@ uv run --locked python scripts/capture_dependency_cases.py runs/dependency-captu
 | `src/deepdebug/collection.py` | 宿主驱动的 CLI 取证流程 |
 | `src/deepdebug/reporting/`、`ui/` | 双格式报告、内容一致性校验与 Streamlit 展示 |
 | `src/deepdebug/sessions.py`、`continuation.py` | 本地会话保存、保留期和补充材料续跑 |
-| `src/deepdebug/evaluation/` | 固定版本评测执行、人工评分与指标汇总 |
+| `src/deepdebug/evaluation/` | 固定版本评测执行、具名人工/AI 评分与指标汇总 |
 | `tests/` | 自动化检查 |
 | `docs/` | 架构决策与逐步进度 |
 | `benchmark/`、`scripts/` | 10 个开发案例、30 个测试案例、语义标签及固定采集脚本 |
