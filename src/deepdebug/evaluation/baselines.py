@@ -60,7 +60,11 @@ class BaselineBoundary(OutboundBoundary):
             for item in self._review.content.materials
             if self.approach == "B1" or item.artifact.kind == "log"
         ]
-        data = {"materials": materials, "response_schema": BaselineAnswer.model_json_schema()}
+        data = {
+            "output_format": "JSON",
+            "materials": materials,
+            "response_schema": BaselineAnswer.model_json_schema(),
+        }
         if self.approach == "B1":
             # Same curated source pool that A can retrieve, without gold or local observations.
             data["documents"] = json.loads(corpus_bytes())["documents"]

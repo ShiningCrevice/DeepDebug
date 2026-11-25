@@ -7,6 +7,8 @@ name = "deepdebug-agent"
 version = "0.1.0"
 description = "Evidence-based diagnosis assistant for PyTorch failures"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.5,<3",

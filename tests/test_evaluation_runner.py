@@ -320,3 +320,19 @@ def test_agent_flushes_known_usage_before_interruption(bundle, monkeypatch):
     )
     assert events[-1]["state"]["budget"]["tokens_used"] == 168
     assert events[-1]["state"]["tool_history"][-1]["tool"] == "read_artifact"
+
+
+@pytest.mark.parametrize("approach", ["B0", "B1"])
+def test_baseline_json_mode_requirement_is_present_in_user_message(bundle, monkeypatch, approach):
+    def handler(request):
+        payload = json.loads(request.content)
+        if "json" not in payload["input"][0]["content"].lower():
+            return httpx.Response(400, json={"error": {"type": "invalid_request_error"}})
+        return response(BASELINE_ANSWER)
+
+    mock_http(monkeypatch, handler)
+    folder, plan = bundle
+    review = confirm_materials(load_review(folder / "dep_001.review.json"))
+    result, _ = run_task(review, plan, approach)
+    assert result["failure"] is None
+    assert result["report"] == BASELINE_ANSWER

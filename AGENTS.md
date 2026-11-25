@@ -3,7 +3,7 @@
 ## 项目依据与当前状态
 
 - 首先阅读 `DeepDebug_planning.md`、`README.md` 和 `docs/progress.md`。
-- 当前完成 Step 29（本地交付预览）：源码 c9fe536 与脱敏演示产物已打包并校验；503 项测试通过，固定回归 6/6，完整里程碑 4/6。真实评测、人工评分、建议匹配、许可证和视频待完成，详情见 `docs/progress.md`、`docs/delivery.md`。
+- 当前完成 Step 30（基线接口修复与 MIT 许可）：505 项测试通过，B0/B1 正文显式声明 JSON；MIT 署名 2026 ShiningCrevice。完整里程碑 4/6，首轮试跑 A 成功、B0/B1 HTTP 400；修复后重新试跑 3 项，通过后执行全部 120 项，累计额度不超过 24,000,000 token。详情见 `docs/progress.md`。
 - `replay` 使用 synthetic 固定响应驱动真实工具，不计为模型诊断效果。快照证据保留所用副本的 JSON 值，未关联匹配检查的报告验证状态为“未执行”。实现与验证记录见 `docs/progress.md`。
 - 下一步执行开发集预检和 B0/B1/A 真实评测，人工评分后完成课程交付。`extend-preview` 追加预览；`continue --review-history` 表示已核查旧状态，外发仍须指定目的地与模型。
 - 遵循规划的单 Agent 产品架构；不要擅自扩充 MVP 范围。
