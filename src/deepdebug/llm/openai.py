@@ -37,7 +37,9 @@ class OpenAIResponsesClient:
                 if response.status_code != 200:
                     transient = response.status_code in {408, 429} or response.status_code >= 500
                     raise ModelFailure(
-                        "unavailable" if transient else "error", usage_unknown=transient
+                        "unavailable" if transient else "error",
+                        usage_unknown=transient,
+                        http_status=response.status_code,
                     )
                 body = bytearray()
                 async for chunk in response.aiter_bytes():

@@ -120,6 +120,25 @@ def test_json_mode_supports_materials_without_json_filenames(reviewed, http):
     assert state.report.unresolved_questions == ["请补充环境快照。"]
 
 
+@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize("max_calls", [1, 12])
+def test_http_refusal_keeps_status_without_error_body(reviewed, http, status, max_calls):
+    body = "private-provider-error-body"
+    requests = http(lambda _: httpx.Response(status, json={"error": body}))
+    trace = io.StringIO()
+    state = diagnose(
+        reviewed, consent(reviewed), budget=Budget(max_decision_calls=max_calls), trace_stream=trace
+    )
+    assert len(requests) == 1
+    assert state.stop_reason == ("budget_exhausted" if max_calls == 1 else "model_error")
+    assert any(f"HTTP {status}" in question for question in state.report.unresolved_questions)
+    events = [json.loads(line) for line in trace.getvalue().splitlines()]
+    error = next(event for event in events if event["event"] == "model_error")
+    assert error["details"]["http_status"] == status
+    assert body not in trace.getvalue()
+    assert body not in state.model_dump_json()
+
+
 @pytest.fixture
 def http(monkeypatch):
     original = httpx.AsyncClient

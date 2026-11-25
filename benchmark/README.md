@@ -80,6 +80,8 @@ uv run --locked python -m deepdebug.evaluation.scoring summarize runs/eval-dev \
 
 评分表绑定计划、结果与轨迹摘要，中断任务绑定 started 和已有轨迹；补跑或修改结果后旧评分表失效，须另生成并重新核查。中断轨迹中的已知 token 保留，总用量标记不完整。耗时、完整输入/输出/合计用量与已知费用分别给出样本数、均值、中位数及 nearest-rank P95；未知量不填零。汇总内的失败清单供至少五个典型失败分析使用，不自动生成语义结论。
 
+评测执行器在服务返回 HTTP 401/403 后保存当前失败结果并停止批次，CLI 返回 1；后续任务保持未开始，仍计入计划分母。`failure_http_status` 记录状态码，不保存供应商错误正文。
+
 ## 六案例固定运行检查
 
 ```bash

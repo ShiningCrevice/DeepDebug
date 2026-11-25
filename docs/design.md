@@ -167,7 +167,7 @@ UI 重新打开进入独立保存视图，展示该会话的材料、报告和�
 
 `evaluation.runner` 从冻结数据生成逐例脱敏预览和 EvaluationPlan，绑定 Git 版本、材料摘要、指令、文档与模型参数。运行要求明确核查、目的地和模型一致，且工作树干净。开始记录保存计划摘要，已有任务不会因再次执行而重发；中断任务保留在计划分母中。
 
-B0/B1 的 BaselineBoundary 复用已确认范围校验、HTTP 超时、输出限制和密钥脱敏；它们只发送一次，采用独立结构化答案，保留无效响应及已知用量。B0 提供日志，B1 提供全部同源材料和文档。基线输入正文用 `output_format: JSON` 声明输出格式，满足供应商对 JSON mode 输入消息的检查；诊断规则仍由固定指令与 Schema 定义。A 复用 Controller、OutboundBoundary 与工具调度；EvaluationSession 将本机预置检查标为 unavailable，保持主评测基于固定材料，现场修复验证单独记录。
+B0/B1 的 BaselineBoundary 复用已确认范围校验、HTTP 超时、输出限制和密钥脱敏；它们只发送一次，采用独立结构化答案，保留无效响应及已知用量。任务的 `failure_http_status` 保留终止相关的 HTTP 状态；三种方案遇到 401/403 时，执行器先保存结果与轨迹，再停止批次并让命令返回非零状态，后续任务保持未开始。B0 提供日志，B1 提供全部同源材料和文档。基线输入正文用 `output_format: JSON` 声明输出格式，满足供应商对 JSON mode 输入消息的检查；诊断规则仍由固定指令与 Schema 定义。A 复用 Controller、OutboundBoundary 与工具调度；EvaluationSession 将本机预置检查标为 unavailable，保持主评测基于固定材料，现场修复验证单独记录。
 
 执行器只写任务事实，不读取语义标签参与模型请求。评分数据后续与结果关联；缺失用量和价格不推算为零费用。
 

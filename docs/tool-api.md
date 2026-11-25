@@ -86,7 +86,7 @@ CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者
 
 适配器向已确认 endpoint 发送 POST（默认 `/v1/responses`），使用 `text.format.type=json_object`、`store=false`，不提供供应商工具调用接口。输出上限为 `min(4096, 剩余token - 请求UTF-8字节数 - 1024)`，低于 16 时返回本地 budget 失败；输入预留是保守估算，实际用量取响应字段。HTTP 读取上限为解码后的 1 MiB，异步超时覆盖本次 HTTP 操作。供应商错误正文、拒答正文和无效原始决策不写入轨迹。
 
-`ModelFailure.kind`：timeout 表示请求超时；unavailable 表示传输错误、HTTP 408/429/5xx；error 表示其他 HTTP 状态、无效响应或边界拒绝；budget 表示请求准备期间时间/额度不足。timeout/unavailable 共用控制器的一次重试；适配器不隐式重试、不跟随重定向、不读取代理配置。`usage_unknown=true` 会使预算统计标为不完整。收到有效用量但生成不完整/拒答时，记账后停止，不使用部分决策。
+`ModelFailure.kind`：timeout 表示请求超时；unavailable 表示传输错误、HTTP 408/429/5xx；error 表示其他 HTTP 状态、无效响应或边界拒绝；budget 表示请求准备期间时间/额度不足。timeout/unavailable 共用控制器的一次重试；适配器不隐式重试、不跟随重定向、不读取代理配置。`http_status` 在 HTTP 拒绝时记录数字状态码，其他失败为 null；控制器将其写入 model_error 事件，终止报告显示该状态码，不包含供应商错误正文。`usage_unknown=true` 会使预算统计标为不完整。收到有效用量但生成不完整/拒答时，记账后停止，不使用部分决策。
 
 `diagnose --max-tokens N` 设置总 token 预算（默认 50,000），包含固定 5,000 报告预留；小于预留的值在启动时拒绝。实际请求使用扣除预留及已用量后的额度，再按上述保守输入预留计算输出上限；因此总预算仍有余量时也可能发生输出截断。单次输出最多 4,096。
 
@@ -96,7 +96,7 @@ CLI 新增可选 `--base-url`，优先于环境变量 `OPENAI_BASE_URL`，两者
 
 `JsonlTrace(stream).write(event, state, details)` 在写入前重校验完整状态，并逐行 flush。每行含递增 `sequence`、带时区 `recorded_at`、`session_id`、`event`、`details` 和完整 `state`。
 
-事件为 start、resume、checkpoint、model_request、model_response、model_error、invalid_decision、decision、tool、stop、verification。start/resume 标注 offline/remote；checkpoint 标注缺少旧轨迹时保存的已有状态，verification 记录后置验证结果；model_response 记录输入输出用量；model_error 记录固定分类及用量未知标记。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹。`--trace` 仅新建文件，不自动删除，支持核查历史和追加材料后的显式续跑。`--root` 的轨迹包含原始材料；`--reviewed` 的材料内容来自脱敏副本，每个状态保留 `material_review_sha256`；云端状态另保留 `cloud_consent`。
+事件为 start、resume、checkpoint、model_request、model_response、model_error、invalid_decision、decision、tool、stop、verification。start/resume 标注 offline/remote；checkpoint 标注缺少旧轨迹时保存的已有状态，verification 记录后置验证结果；model_response 记录输入输出用量；model_error 记录固定分类、用量未知标记及可用的 http_status。decision 保存观察摘要和新假设；tool 保存完整动作、原始工具调用 ID 与 cached 标记。成功、拒绝和不可用结果均可通过状态的 tool_history 追溯；缓存命中不会新增历史项。无效原始响应不写入轨迹。`--trace` 仅新建文件，不自动删除，支持核查历史和追加材料后的显式续跑。`--root` 的轨迹包含原始材料；`--reviewed` 的材料内容来自脱敏副本，每个状态保留 `material_review_sha256`；云端状态另保留 `cloud_consent`。
 
 ## 材料登记
 

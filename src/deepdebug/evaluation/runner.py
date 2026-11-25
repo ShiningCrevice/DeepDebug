@@ -254,6 +254,7 @@ def baseline(review, consent, approach: str, budget: Budget) -> dict:
         "output_tokens": 0,
         "usage_complete": True,
         "failure": None,
+        "failure_http_status": None,
     }
     try:
         response = client.decide(request)
@@ -274,6 +275,7 @@ def baseline(review, consent, approach: str, budget: Budget) -> dict:
     except ModelFailure as exc:
         result.update(
             failure=exc.kind,
+            failure_http_status=exc.http_status,
             usage_complete=not exc.usage_unknown,
             model_calls=0 if exc.kind == "budget" else 1,
         )
@@ -322,6 +324,16 @@ def run_task(
             "failure": None
             if state.stop_reason in {"completed", "need_info"}
             else state.stop_reason,
+            "failure_http_status": next(
+                (
+                    event["details"].get("http_status")
+                    for event in reversed(events)
+                    if event["event"] in {"model_error", "model_response"}
+                ),
+                None,
+            )
+            if state.stop_reason not in {"completed", "need_info"}
+            else None,
         }
     else:
         result = baseline(review, consent, approach, plan.budget)
@@ -384,6 +396,8 @@ def execute(
             write_json(output / "result.json", {**metadata, **result})
             completed += 1
             print(f"{case.case_id}/{approach}: {result['failure'] or 'recorded'}", flush=True)
+            if result.get("failure_http_status") in {401, 403}:
+                raise ModelFailure("error", http_status=result["failure_http_status"])
     return completed
 
 
@@ -424,6 +438,9 @@ def main() -> int:
                 model=args.model,
                 limit=args.limit,
             )
+    except ModelFailure as exc:
+        print(f"评测已停止：模型服务返回 HTTP {exc.http_status}，本次失败结果已保存。")
+        return 1
     except (OSError, ValueError, subprocess.SubprocessError):
         print("评测准备或执行失败：检查冻结版本、计划、确认范围及模型配置。")
         return 1

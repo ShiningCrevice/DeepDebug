@@ -187,15 +187,30 @@ class Controller:
                     budget = self.state.budget.model_dump()
                     budget["usage_complete"] = False
                     self._update(budget=budget)
-                self._event("model_error", kind=exc.kind, usage_unknown=exc.usage_unknown)
+                self._event(
+                    "model_error",
+                    kind=exc.kind,
+                    usage_unknown=exc.usage_unknown,
+                    http_status=exc.http_status,
+                )
                 if exc.kind == "budget":
                     return self._stop("budget_exhausted", questions=["剩余请求额度不足。"])
                 if self._exhausted():
-                    return self._stop("budget_exhausted", questions=["模型请求期间预算耗尽。"])
+                    message = (
+                        f"模型接口返回 HTTP {exc.http_status}，模型请求期间预算耗尽。"
+                        if exc.http_status is not None
+                        else "模型请求期间预算耗尽。"
+                    )
+                    return self._stop("budget_exhausted", questions=[message])
                 if exc.kind in {"timeout", "unavailable"} and not retried:
                     retried = True
                     continue
-                return self._stop("model_error", questions=["模型接口失败，诊断未完成。"])
+                message = (
+                    f"模型接口返回 HTTP {exc.http_status}，诊断未完成。"
+                    if exc.http_status is not None
+                    else "模型接口失败，诊断未完成。"
+                )
+                return self._stop("model_error", questions=[message])
             budget = self.state.budget.model_dump()
             budget["tokens_used"] += response.tokens_used
             self._update(budget=budget)

@@ -39,9 +39,11 @@ class ModelFailure(Exception):
         kind: Literal["timeout", "unavailable", "error", "budget"],
         *,
         usage_unknown: bool = False,
+        http_status: int | None = None,
     ):
         self.kind = kind
         self.usage_unknown = usage_unknown
+        self.http_status = http_status
         super().__init__(kind)
 
 

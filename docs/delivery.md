@@ -1,6 +1,6 @@
 # 交付索引
 
-工程功能、数据集、评测工具、六案例固定运行检查与干净环境复现已完成。正式评测、人工评分、六案例模型建议匹配验证和最终视频仍待完成，当前不能标为完整课程交付。
+工程功能、数据集、评测工具、六案例固定运行检查与干净环境复现已完成。六案例模型建议已由 Shivice 确认匹配。正式评测、整体人工评分和最终视频仍待完成，当前不能标为完整课程交付。
 
 | 材料 | 位置 | 当前状态 |
 |---|---|---|
@@ -10,9 +10,9 @@
 | 技术报告 | [technical-report](technical-report.md) | 本地 8 页 PDF 核查版已纳入本轮统计；语义评分与最终效果表待补 |
 | 数据集与 rubric | [benchmark](../benchmark/README.md) | 10 开发、30 测试，已冻结；标签待人工评分复核 |
 | 检索语料来源 | [knowledge](../knowledge/README.md) | 15 条摘要，来源与版本完整 |
-| 对照评测结果 | 运行目录中的 plan/result/trace/summary | [评测记录](evaluation-results.md)：67 正常结束、46 接口失败、1 中断、6 未开始；HTTP 403 令牌额度待处理 |
+| 对照评测结果 | 运行目录中的 plan/result/trace/summary | [评测记录](evaluation-results.md)：67 正常结束、46 接口失败、1 中断、6 未开始；复测仍为每日配额相关的 HTTP 403 |
 | 代表性报告 | 本地 runs/clean-smoke/report.md 与 report.json | 独立克隆已导出 synthetic 演示，双格式一致 |
-| 运行验证 | builtin-check 与 verify-report | 六个选定案例固定回归 6/6；与实际模型建议的端到端匹配待补 |
+| 运行验证 | builtin-check 与 verify-report | 六个选定案例匹配且固定回归通过 6/6，人工署名 Shivice；对应 f767edd 报告 |
 | 复现记录 | [reproduction](reproduction.md) | 独立环境 495 项测试、构建、报告和 UI 启动通过 |
 | 第三方说明 | [third-party](third-party.md) | 语料来源和安装依赖元数据已列出 |
 | 项目许可证 | [LICENSE](../LICENSE) | MIT，2026 ShiningCrevice |

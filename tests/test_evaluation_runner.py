@@ -9,6 +9,7 @@ import pytest
 from deepdebug.agent.state import Budget
 from deepdebug.evaluation.baselines import BASELINE_INSTRUCTIONS
 from deepdebug.evaluation.runner import code_version, execute, load_plan, prepare, run_task
+from deepdebug.llm.client import ModelFailure
 from deepdebug.security.review import confirm_materials, load_review
 
 ROOT = Path(__file__).resolve().parents[1] / "benchmark"
@@ -128,6 +129,88 @@ def test_failed_baseline_retains_unknown_usage_and_is_not_retried(bundle, monkey
     assert "private provider body" not in json.dumps(result)
     execute(folder, ROOT, reviewed=True, send_to=ENDPOINT, model=plan.model, limit=1)
     assert len(calls) == 2 and (folder / "dep_001.B1/result.json").exists()
+
+
+@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize("approach", ["B0", "B1", "A"])
+def test_access_refusal_saves_result_and_stops_batch(bundle, monkeypatch, status, approach):
+    folder, plan = bundle
+    requests = []
+    stop_at = ["B0", "B1", "A"].index(approach) + 1
+
+    def handler(request):
+        requests.append(request)
+        if len(requests) == stop_at:
+            return httpx.Response(status, text="private-provider-error-body")
+        payload = json.loads(request.content)
+        return response(
+            BASELINE_ANSWER if payload["instructions"] == BASELINE_INSTRUCTIONS else AGENT_ANSWER
+        )
+
+    mock_http(monkeypatch, handler)
+    with pytest.raises(ModelFailure) as error:
+        execute(folder, ROOT, reviewed=True, send_to=ENDPOINT, model=plan.model)
+    assert error.value.http_status == status
+    assert len(requests) == stop_at
+    assert len(list(folder.glob("*/started.json"))) == stop_at
+    output = folder / f"dep_001.{approach}"
+    result = json.loads((output / "result.json").read_text())
+    assert result["failure_http_status"] == status
+    assert result["failure"]
+    assert "private-provider-error-body" not in (output / "result.json").read_text()
+    assert "private-provider-error-body" not in (output / "trace.jsonl").read_text()
+
+    from deepdebug.evaluation.scoring import read_tasks
+
+    _, tasks = read_tasks(folder)
+    assert sum(task["status"] == "failed" for task in tasks) == 1
+    assert sum(task["status"] == "not_started" for task in tasks) == 30 - stop_at
+
+
+def test_cli_exits_with_http_status_when_batch_access_is_refused(bundle, monkeypatch, capsys):
+    from deepdebug.evaluation.runner import main
+
+    folder, plan = bundle
+    mock_http(monkeypatch, lambda _: httpx.Response(403, text="private-provider-error-body"))
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "runner",
+            "run",
+            str(folder),
+            "--root",
+            str(ROOT),
+            "--model",
+            plan.model,
+            "--send-to",
+            ENDPOINT,
+            "--reviewed",
+        ],
+    )
+    assert main() == 1
+    output = capsys.readouterr().out
+    assert "HTTP 403" in output
+    assert "private-provider-error-body" not in output
+
+
+def test_recovered_http_error_is_not_reported_as_later_budget_failure(bundle, monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(503)
+        payload = json.loads(response(AGENT_ANSWER).content)
+        payload["usage"]["input_tokens"] = 200_000
+        return httpx.Response(200, json=payload)
+
+    mock_http(monkeypatch, handler)
+    folder, plan = bundle
+    review = confirm_materials(load_review(folder / "dep_001.review.json"))
+    result, _ = run_task(review, plan, "A")
+    assert len(calls) == 2
+    assert result["failure"] == "budget_exhausted"
+    assert result["failure_http_status"] is None
 
 
 def test_plan_changes_after_start_are_rejected(bundle, monkeypatch):
